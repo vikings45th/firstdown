@@ -22,19 +22,19 @@ jobs:
           service_account_key: ${{ secrets.GCP_SA_KEY }}
           export_default_credentials: true
 
-      # ③ Docker 認証
+      # ④ Docker 認証
       - name: Configure Docker authentication
         run: gcloud auth configure-docker asia-northeast1-docker.pkg.dev --quiet
 
-      # ④ Docker イメージをビルド
+      # ⑤ Docker イメージをビルド
       - name: Build Docker image
         run: docker build -t asia-northeast1-docker.pkg.dev/firstdown-482704/agent-repo/agent:latest ml/agent
 
-      # ⑤ Artifact Registry に push
+      # ⑥ Artifact Registry に push
       - name: Push Docker image
         run: docker push asia-northeast1-docker.pkg.dev/firstdown-482704/agent-repo/agent:latest
 
-      # ⑥ Cloud Run にデプロイ
+      # ⑦ Cloud Run にデプロイ
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy agent \
