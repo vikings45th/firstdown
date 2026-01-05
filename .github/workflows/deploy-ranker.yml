@@ -3,44 +3,52 @@ name: Deploy Ranker to Cloud Run
 on:
   pull_request:
     branches:
-      - main  # dev → main で PR マージされたときに実行
+      - main  # dev → main マージ時に実行
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # ① コードをチェックアウト
-      - name: Checkout code
+      # ① Checkout
+      - name: Checkout
         uses: actions/checkout@v3
 
-      # ② GCP SDK 設定と認証
-      - name: Set up Cloud SDK
+      # ② GCP 認証（公式・推奨）
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # ③ gcloud CLI セットアップ
+      - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
         with:
           project_id: firstdown-482704
-          service_account_key: ${{ secrets.GCP_SA_KEY }}
-          export_default_credentials: true
 
-      # ③ Docker 認証
+      # ④ Artifact Registry 用 Docker 認証
       - name: Configure Docker
-        run: gcloud auth configure-docker asia-northeast1-docker.pkg.dev --quiet
+        run: |
+          gcloud auth configure-docker asia-northeast1-docker.pkg.dev --quiet
 
-      # ④ Docker イメージをビルド
+      # ⑤ Docker build（ranker）
       - name: Build Docker image
         run: |
-          docker build -t asia-northeast1-docker.pkg.dev/firstdown-482704/ranker-repo/ranker:$GITHUB_SHA ./ml/ranker
+          docker build \
+            -t asia-northeast1-docker.pkg.dev/firstdown-482704/ranker-repo/ranker:${{ github.sha }} \
+            ./ml/ranker
 
-      # ⑤ Artifact Registry に push
+      # ⑥ Docker push
       - name: Push Docker image
         run: |
-          docker push asia-northeast1-docker.pkg.dev/firstdown-482704/ranker-repo/ranker:$GITHUB_SHA
+          docker push \
+            asia-northeast1-docker.pkg.dev/firstdown-482704/ranker-repo/ranker:${{ github.sha }}
 
-      # ⑥ Cloud Run にデプロイ
+      # ⑦ Cloud Run deploy
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ranker \
-            --image asia-northeast1-docker.pkg.dev/firstdown-482704/ranker-repo/ranker:$GITHUB_SHA \
+            --image asia-northeast1-docker.pkg.dev/firstdown-482704/ranker-repo/ranker:${{ github.sha }} \
             --region asia-northeast1 \
             --platform managed \
             --allow-unauthenticated
