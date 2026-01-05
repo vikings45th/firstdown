@@ -28,17 +28,17 @@ jobs:
 
       # ④ Docker イメージをビルド
       - name: Build Docker image
-        run: docker build -t asia-northeast1-docker.pkg.dev/firstdown-482704/firstdown-repo/agent:latest ml/agent
+        run: docker build -t asia-northeast1-docker.pkg.dev/firstdown-482704/agent-repo/agent:latest ml/agent
 
       # ⑤ Artifact Registry に push
       - name: Push Docker image
-        run: docker push asia-northeast1-docker.pkg.dev/firstdown-482704/firstdown-repo/agent:latest
+        run: docker push asia-northeast1-docker.pkg.dev/firstdown-482704/agent-repo/agent:latest
 
       # ⑥ Cloud Run にデプロイ
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy agent \
-            --image asia-northeast1-docker.pkg.dev/firstdown-482704/firstdown-repo/agent:latest \
+            --image asia-northeast1-docker.pkg.dev/firstdown-482704/agent-repo/agent:latest \
             --region asia-northeast1 \
             --platform managed \
             --allow-unauthenticated
