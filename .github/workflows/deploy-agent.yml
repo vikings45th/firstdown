@@ -1,52 +1,47 @@
 name: Deploy Agent to Cloud Run
 
 on:
-  push:
+  pull_request:
     branches:
-      - main  # dev→main マージ時に自動実行
+      - main  # dev → main で PR マージされたときに実行
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. コードをチェックアウト
+      # ① コードをチェックアウト
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 2. GCP SDK 設定と認証
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3
-        with:
-          project_id: firstdown-482704
-          service_account_key: ${{ secrets.GCP_SA_KEY }}
-          export_default_credentials: true
+      # ② GCP サービスアカウント JSON を復号
+      - name: Write GCP key from base64
+        run: |
+          echo "${{ secrets.GCP_SA_KEY_B64 }}" | base64 --decode > $HOME/gcp-key.json
 
-      # 3. 認証確認
-      - name: Verify gcloud authentication
-        run: gcloud auth list
+      # ③ gcloud 認証
+      - name: Authenticate gcloud
+        run: gcloud auth activate-service-account --key-file=$HOME/gcp-key.json
 
-      # 4. Docker 認証
-      - name: Configure Docker for Artifact Registry
+      # ④ Docker 認証
+      - name: Configure Docker
         run: gcloud auth configure-docker asia-northeast1-docker.pkg.dev --quiet
 
-      # 5. Docker イメージをビルド
+      # ⑤ Docker イメージをビルド
       - name: Build Docker image
         run: |
-          docker build \
-            -t asia-northeast1-docker.pkg.dev/firstdown-482704/agent-repo/agent:${GITHUB_SHA} \
-            ml/agent
+          docker build -t asia-northeast1-docker.pkg.dev/firstdown-482704/agent-repo/agent:$GITHUB_SHA ./ml/agent
 
-      # 6. Docker push
+      # ⑥ Artifact Registry に push
       - name: Push Docker image
         run: |
-          docker push asia-northeast1-docker.pkg.dev/firstdown-482704/agent-repo/agent:${GITHUB_SHA}
+          docker push asia-northeast1-docker.pkg.dev/firstdown-482704/agent-repo/agent:$GITHUB_SHA
 
-      # 7. Cloud Run デプロイ
+      # ⑦ Cloud Run にデプロイ
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy agent \
-            --image asia-northeast1-docker.pkg.dev/firstdown-482704/agent-repo/agent:${GITHUB_SHA} \
+            --image asia-northeast1-docker.pkg.dev/firstdown-482704/agent-repo/agent:$GITHUB_SHA \
             --region asia-northeast1 \
             --platform managed \
             --allow-unauthenticated
