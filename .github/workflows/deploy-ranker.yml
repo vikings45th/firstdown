@@ -24,7 +24,9 @@ jobs:
 
       # ④ Docker 認証
       - name: Configure Docker authentication
-        run: gcloud auth configure-docker asia-northeast1-docker.pkg.dev --quiet
+        run: |
+          gcloud auth configure-docker asia-northeast1-docker.pkg.dev --quiet
+          gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://asia-northeast1-docker.pkg.dev
 
       # ⑤ Docker イメージをビルド
       - name: Build Docker image
