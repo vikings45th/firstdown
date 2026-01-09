@@ -1,43 +1,20 @@
 <script setup lang="ts">
-  import type { NavigationMenuItem } from '@nuxt/ui'
-  
-  const bottomNavItems: NavigationMenuItem[] = [
-    {
-      label: '利用規約',
-      to: '/terms',
-    },
-    {
-      label: 'プライバシーポリシー',
-      to: '/policy',
-    },
-    {
-      label: '運営者情報',
-      to: '/operator',
-    },
-    {
-      label: 'お問い合わせ',
-      to: '/contact',
-    }
-  ]
+  // Google Maps APIをアプリ全体で一度だけ読み込む
+  useHead({
+    script: [
+      {
+        src: 'https://maps.googleapis.com/maps/api/js?key=AIzaSyAFhnRF8Mg46-4tlkOEWX0_0EG3Oy59Dz4&v=weekly',
+        defer: true,
+        key: 'google-maps-api' // 重複を防ぐためのキー
+      }
+    ]
+  })
 </script>
   
 <template>
   <UApp>
-    <UHeader title="Seren Walk" />
-
-    <UMain>
-      <NuxtLayout>
-        <NuxtPage />
-      </NuxtLayout>
-    </UMain>
-
-    <UFooter>
-      <template #left>
-        <p class="text-muted text-sm">Copyright © {{ new Date().getFullYear() }}</p>
-      </template>
-      <template #right>
-        <UNavigationMenu :items="bottomNavItems" variant="link" />
-      </template>
-    </UFooter>
+    <NuxtLayout>
+      <NuxtPage />
+    </NuxtLayout>
   </UApp>
 </template>
