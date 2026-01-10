@@ -141,7 +141,7 @@ async def generate(req: GenerateRouteRequest) -> GenerateRouteResponse:
         if encoded and encoded != "xxxx":
             pts = polyline.decode_polyline(encoded)
             sample_latlngs = polyline.sample_points(pts, [0.25, 0.5, 0.75])
-
+#memo
         # Fallback to start point if decode failed or dummy
         encoded = (chosen.get("polyline") or "").strip()
         sample_latlngs: List[tuple[float, float]] = []
@@ -173,7 +173,7 @@ async def generate(req: GenerateRouteRequest) -> GenerateRouteResponse:
     except Exception:
         spots = []
 
-    summary = "【簡易提案】条件に合わせた散歩ルートです"
+    summary = "【簡易提案!】条件に合わせた散歩ルートです"
     summary_type = "template"
     try:
         vertex_summary = await vertex_llm.generate_summary(
