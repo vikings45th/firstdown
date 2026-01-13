@@ -1,19 +1,3 @@
-from __future__ import annotations
-
-from typing import Any, Dict, Optional
-import google.auth
-import google.auth.transport.requests
-import httpx
-
-from app.settings import settings
-
-
-def _get_auth_token() -> str:
-    credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
-    credentials.refresh(google.auth.transport.requests.Request())
-    return credentials.token
-
-
 async def generate_summary(
     *,
     theme: str,
@@ -51,9 +35,7 @@ async def generate_summary(
     )
 
     body: Dict[str, Any] = {
-        "contents": [
-            {"role": "user", "parts": [{"text": prompt}]}
-        ],
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": settings.VERTEX_TEMPERATURE,
             "topP": settings.VERTEX_TOP_P,
@@ -77,17 +59,19 @@ async def generate_summary(
         print("[Vertex Gemini Empty] candidates is empty")
         return None
 
-    content = candidates[0].get("content") or {}
-    parts = content.get("parts") or []
-    if not parts:
-        print("[Vertex Gemini Empty] parts is empty")
-        return None
+    # candidates / parts を安全に走査して、最初に取れる本文を返す
+    for cand in candidates:
+        content = cand.get("content") or {}
+        parts = content.get("parts") or []
+        texts = []
+        for p in parts:
+            t = p.get("text")
+            if isinstance(t, str) and t.strip():
+                texts.append(t.strip())
+        out = "\n".join(texts).strip()
+        if out:
+            print(f"[Vertex Gemini Result] len={len(out)}")
+            return out
 
-    text = parts[0].get("text")
-    if isinstance(text, str) and text.strip():
-        out = text.strip()
-        print(f"[Vertex Gemini Result] len={len(out)}")
-        return out
-
-    print(f"[Vertex Gemini Empty] unexpected candidate format: {candidates[0]}")
+    print(f"[Vertex Gemini Empty] unexpected candidates format: {candidates[:1]}")
     return None
