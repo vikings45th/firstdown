@@ -1,3 +1,20 @@
+from __future__ import annotations
+
+from typing import Any, Dict, Optional
+
+import google.auth
+import google.auth.transport.requests
+import httpx
+
+from app.settings import settings
+
+
+def _get_auth_token() -> str:
+    credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    credentials.refresh(google.auth.transport.requests.Request())
+    return credentials.token
+
+
 async def generate_summary(
     *,
     theme: str,
@@ -18,16 +35,13 @@ async def generate_summary(
             spots_text = f" 見どころ: {spot_names}。"
 
     prompt = (
-        f"以下の散歩ルートの紹介文を日本語で一文で作成してください。"
+        "以下の散歩ルートの紹介文を日本語で一文で作成してください。"
         f" テーマ: {theme}。目安距離: {distance_km:.1f}km。所要時間: {duration_min:.0f}分。"
         f"{spots_text} 丁寧で簡潔に。"
     )
 
     token = _get_auth_token()
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
     endpoint = (
         f"https://{location}-aiplatform.googleapis.com/v1/"
@@ -44,13 +58,9 @@ async def generate_summary(
         },
     }
 
-
     print(f"[Vertex Gemini Call] model={model} project={project} location={location}")
 
-
     async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT_SEC) as client:
-        print(f"[Vertex LLM Call] model={settings.VERTEX_TEXT_MODEL} project={settings.VERTEX_PROJECT} location={settings.VERTEX_LOCATION}")
-        
         resp = await client.post(endpoint, headers=headers, json=body)
 
     if resp.status_code != 200:
@@ -63,7 +73,6 @@ async def generate_summary(
         print("[Vertex Gemini Empty] candidates is empty")
         return None
 
-    # candidates / parts を安全に走査して、最初に取れる本文を返す
     for cand in candidates:
         content = cand.get("content") or {}
         parts = content.get("parts") or []
@@ -77,6 +86,5 @@ async def generate_summary(
             print(f"[Vertex Gemini Result] len={len(out)}")
             return out
 
-    print(f"[Vertex Gemini Empty] unexpected candidates format: {candidates[:1]}")
+    print("[Vertex Gemini Empty] no text in candidates")
     return None
-
