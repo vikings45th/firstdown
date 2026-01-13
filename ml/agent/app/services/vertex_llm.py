@@ -50,12 +50,9 @@ async def generate_summary(
 
     body: Dict[str, Any] = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-
         "generationConfig": {
             "temperature": settings.VERTEX_TEMPERATURE,
-            "topP": settings.VERTEX_TOP_P,
-            "topK": settings.VERTEX_TOP_K,
-            "maxOutputTokens": 128,
+            "maxOutputTokens": 64,
         },
     }
 
