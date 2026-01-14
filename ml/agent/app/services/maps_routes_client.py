@@ -112,7 +112,7 @@ async def compute_route_candidates(
     headers = {
         "X-Goog-Api-Key": api_key,
         # Include steps for stairway detection and elevation data
-        "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.navigationInstruction,routes.legs.steps.stepType",
+        "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.navigationInstruction",
     }
 
     async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT_SEC) as client:
@@ -185,13 +185,18 @@ async def compute_route_candidates(
                 for step in steps:
                     # Check for stairs in navigation instruction
                     nav_instruction = step.get("navigationInstruction", {})
-                    instruction_text = nav_instruction.get("instructions", "").lower()
-                    if "stairs" in instruction_text or "階段" in instruction_text or "stair" in instruction_text:
-                        has_stairs = True
-                    
-                    # Check stepType for elevation changes
-                    step_type = step.get("stepType", "")
-                    # stepType might indicate elevation changes, but we'll calculate from elevation data if available
+                    if nav_instruction:
+                        # Check instructions text
+                        instruction_text = nav_instruction.get("instructions", "").lower()
+                        if "stairs" in instruction_text or "階段" in instruction_text or "stair" in instruction_text:
+                            has_stairs = True
+                        
+                        # Check maneuver type (if available)
+                        maneuver = nav_instruction.get("maneuver", "")
+                        if isinstance(maneuver, str):
+                            maneuver_lower = maneuver.lower()
+                            if "stairs" in maneuver_lower or "階段" in maneuver_lower or "stair" in maneuver_lower:
+                                has_stairs = True
             
             # Calculate elevation gain from Elevation API if polyline is available
             if encoded:
