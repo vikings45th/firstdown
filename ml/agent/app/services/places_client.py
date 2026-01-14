@@ -82,6 +82,15 @@ async def search_spots(
     if not api_key:
         logger.warning("[Places API] MAPS_API_KEY is not configured")
         return []
+    
+    logger.debug(
+        "[Places API] Starting search: lat=%.6f lng=%.6f theme=%s radius_m=%d max_results=%d",
+        lat,
+        lng,
+        theme,
+        radius_m,
+        max_results,
+    )
 
     headers = {
         "X-Goog-Api-Key": api_key,

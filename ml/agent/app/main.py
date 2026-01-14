@@ -198,6 +198,13 @@ async def generate(req: GenerateRouteRequest) -> GenerateRouteResponse:
         if not sample_latlngs:
             sample_latlngs = [(float(req.start_location.lat), float(req.start_location.lng))]
 
+        logger.info(
+            "[Places] request_id=%s sample_latlngs=%d points: %s",
+            req.request_id,
+            len(sample_latlngs),
+            sample_latlngs,
+        )
+
         # Places 重複排除: name（または place_id）基準
         # Places 上限件数制御: 全体 max 件数（5件）が保証される
         merged: List[Dict[str, Any]] = []
@@ -211,12 +218,27 @@ async def generate(req: GenerateRouteRequest) -> GenerateRouteResponse:
                 break
             
             # themeに応じた場所タイプで検索（「それっぽい」体験に寄せる）
+            logger.debug(
+                "[Places] request_id=%s searching at (%.6f, %.6f) theme=%s",
+                req.request_id,
+                lat,
+                lng,
+                req.theme,
+            )
             found = await places_client.search_spots(
                 lat=float(lat),
                 lng=float(lng),
                 theme=req.theme,
                 radius_m=800,
                 max_results=3,
+            )
+            logger.info(
+                "[Places] request_id=%s found %d places at (%.6f, %.6f): %s",
+                req.request_id,
+                len(found),
+                lat,
+                lng,
+                [p.get("name") for p in found],
             )
             for p in found:
                 # 上限に達したら終了
