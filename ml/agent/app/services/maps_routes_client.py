@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import math
+import logging
 from typing import Any, Dict, List
 
 import httpx
 
 from app.settings import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _offset_latlng(lat: float, lng: float, distance_km: float, heading_deg: float) -> Dict[str, float]:
@@ -88,7 +91,12 @@ async def compute_route_candidates(
             
             # 200以外のstatus / response bodyを必ずログ出力
             if resp.status_code != 200:
-                print(f"[Routes API Error] request_id={request_id} status={resp.status_code} body={resp.text[:500]}")
+                logger.warning(
+                    "[Routes API Error] request_id=%s status=%d body=%s",
+                    request_id,
+                    resp.status_code,
+                    resp.text[:500],
+                )
                 # 400エラーの場合はその場で打ち切り
                 if resp.status_code == 400:
                     return []
@@ -97,7 +105,7 @@ async def compute_route_candidates(
             try:
                 data = resp.json()
             except Exception as e:
-                print(f"[Routes API Error] JSON Parse Failed. RequestID={request_id} Error={e}")
+                logger.error("[Routes API Error] JSON Parse Failed. request_id=%s err=%r", request_id, e)
                 continue
             routes = data.get("routes", [])
             if not routes:

@@ -1,7 +1,10 @@
 from typing import Any, Dict, List, Tuple
+import logging
 import httpx
 
 from app.settings import settings
+
+logger = logging.getLogger(__name__)
 
 
 async def rank_routes(
@@ -20,17 +23,27 @@ async def rank_routes(
         async with httpx.AsyncClient(timeout=timeout) as client:
             r = await client.post(f"{settings.RANKER_URL}/rank", json=payload)
     except httpx.TimeoutException as e:
-        print(f"[Ranker Timeout] request_id={request_id} timeout_sec={settings.RANKER_TIMEOUT_SEC} err={repr(e)}")
+        logger.error(
+            "[Ranker Timeout] request_id=%s timeout_sec=%.1f err=%r",
+            request_id,
+            settings.RANKER_TIMEOUT_SEC,
+            e,
+        )
         raise
     except httpx.RequestError as e:
-        print(f"[Ranker Request Error] request_id={request_id} err={repr(e)}")
+        logger.error("[Ranker Request Error] request_id=%s err=%r", request_id, e)
         raise
 
     if r.status_code == 200:
         data = r.json()
         return data.get("scores", []), data.get("failed_route_ids", [])
     if r.status_code != 200:
-        print(f"[Ranker HTTP] request_id={request_id} status={r.status_code} body={r.text[:500]}")
+        logger.warning(
+            "[Ranker HTTP] request_id=%s status=%d body=%s",
+            request_id,
+            r.status_code,
+            r.text[:500],
+        )
     if r.status_code == 422:
         # Ranker could not score any route
         return [], [x.get("route_id") for x in routes if "route_id" in x]

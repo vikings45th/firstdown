@@ -15,6 +15,7 @@ class RankRequest(BaseModel):
 class ScoreItem(BaseModel):
     route_id: str
     score: float
+    breakdown: Optional[Dict[str, float]] = None  # スコア内訳（debug用）
 
 
 class RankResponse(BaseModel):
