@@ -246,7 +246,6 @@ async def generate(req: GenerateRouteRequest) -> GenerateRouteResponse:
                 
                 if not is_duplicate:
                     merged.append(p)
-
         # 上限件数まで取得（既にmax_spots以下になっているはずだが、念のため）
         spots_raw = merged[:max_spots]
         # DictをSpotオブジェクトに変換
