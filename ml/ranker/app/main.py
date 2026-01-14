@@ -43,11 +43,31 @@ def _calculate_score(features: Dict[str, Any]) -> tuple[float, Dict[str, float]]
     poi_density = float(features.get("poi_density", 0.0))
     poi_bonus = park_poi_ratio * 0.15 + min(poi_density, 1.0) * 0.1  # 上限あり
     
+    # 4. Exerciseテーマの場合: 坂道と階段のボーナス
+    exercise_bonus = 0.0
+    theme_exercise = features.get("theme_exercise", 0)
+    if theme_exercise:
+        # 階段がある場合のボーナス（運動強度が高い）
+        has_stairs = features.get("has_stairs", 0)
+        if has_stairs:
+            exercise_bonus += 0.15  # 階段があると運動強度が高い
+        
+        # 標高差密度（m/km）に基づくボーナス
+        elevation_density = float(features.get("elevation_density", 0.0))  # m/km
+        # 適度な坂道（10-50m/km）が理想的
+        if 10.0 <= elevation_density <= 50.0:
+            exercise_bonus += 0.2  # 適度な坂道は良い
+        elif 5.0 <= elevation_density < 10.0:
+            exercise_bonus += 0.1  # 軽い坂道も良い
+        elif elevation_density > 50.0:
+            exercise_bonus += 0.1  # 急な坂道も運動強度は高いが、やや減点
+        # 0-5m/kmは平地でボーナスなし
+    
     # ベーススコア
     base = 0.5
     
     # 合計
-    score = base + distance_penalty + loop_closure_bonus + poi_bonus
+    score = base + distance_penalty + loop_closure_bonus + poi_bonus + exercise_bonus
     score = max(0.0, min(1.0, score))  # 0.0-1.0にクリップ
     
     # 内訳（debug用）
@@ -56,6 +76,7 @@ def _calculate_score(features: Dict[str, Any]) -> tuple[float, Dict[str, float]]
         "distance_penalty": distance_penalty,
         "loop_closure_bonus": loop_closure_bonus,
         "poi_bonus": poi_bonus,
+        "exercise_bonus": exercise_bonus,
         "final_score": score,
     }
     
@@ -71,6 +92,11 @@ def rank(req: RankRequest) -> RankResponse:
     - 距離乖離: 目標距離との誤差が小さいほど良い（ペナルティ方式）
     - Loop closure: 往復ルート要求時、loop_closure_mが小さいほど良い
     - POI数: park_poi_ratioとpoi_densityが高いほど良い
+    - Exerciseテーマ: 階段の有無と標高差密度（坂道の程度）を考慮
+      - 階段がある: +0.15
+      - 標高差密度10-50m/km（適度な坂道）: +0.2
+      - 標高差密度5-10m/km（軽い坂道）: +0.1
+      - 標高差密度50m/km以上（急な坂道）: +0.1
     """
     scores = []
     failed = []
