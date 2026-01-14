@@ -112,7 +112,9 @@ async def compute_route_candidates(
     headers = {
         "X-Goog-Api-Key": api_key,
         # Include steps for stairway detection and elevation data
-        "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.navigationInstruction,routes.legs.steps.stepType",
+        # Note: routes.legs must be included to access routes.legs.steps
+        # stepType field doesn't exist in Routes API v2, so we request the full steps object
+        "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs,routes.legs.steps,routes.legs.steps.navigationInstruction",
     }
 
     async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT_SEC) as client:
@@ -141,6 +143,19 @@ async def compute_route_candidates(
                 ]
             else:
                 body["destination"] = {"location": {"latLng": {"latitude": dest["lat"], "longitude": dest["lng"]}}}
+            
+            # リクエストのログ出力（デバッグ用）
+            logger.debug(
+                "[Routes API Request] request_id=%s route_%d origin=(%.6f,%.6f) dest=(%.6f,%.6f) round_trip=%s",
+                request_id,
+                idx,
+                start_lat,
+                start_lng,
+                dest["lat"],
+                dest["lng"],
+                round_trip,
+            )
+            
             resp = await client.post(settings.MAPS_ROUTES_BASE, json=body, headers=headers)
             
             # 200以外のstatus / response bodyを必ずログ出力
@@ -161,20 +176,57 @@ async def compute_route_candidates(
             except Exception as e:
                 logger.error("[Routes API Error] JSON Parse Failed. request_id=%s err=%r", request_id, e)
                 continue
+            
+            # レスポンスの構造をログ出力（デバッグ用）
+            if "error" in data:
+                logger.warning(
+                    "[Routes API Error] request_id=%s error=%s",
+                    request_id,
+                    data.get("error", {}),
+                )
+                continue
+            
             routes = data.get("routes", [])
             if not routes:
+                logger.warning(
+                    "[Routes API] request_id=%s no routes returned. response_keys=%s",
+                    request_id,
+                    list(data.keys()) if isinstance(data, dict) else "not_dict",
+                )
                 continue
+            
             r0 = routes[0]
             encoded = r0.get("polyline", {}).get("encodedPolyline")
             distance_m = r0.get("distanceMeters")
             duration = r0.get("duration")
-            # duration is like "123s"
+            
+            # duration is like "123s" (ISO 8601 duration format)
             duration_sec = 0.0
             if isinstance(duration, str) and duration.endswith("s"):
                 try:
                     duration_sec = float(duration[:-1])
                 except ValueError:
+                    logger.warning(
+                        "[Routes API] request_id=%s invalid duration format: %s",
+                        request_id,
+                        duration,
+                    )
                     duration_sec = 0.0
+            elif duration is None:
+                logger.debug(
+                    "[Routes API] request_id=%s duration field not found in response",
+                    request_id,
+                )
+            
+            # 必須フィールドの検証
+            if not encoded:
+                logger.warning(
+                    "[Routes API] request_id=%s route_%d missing encodedPolyline. route_keys=%s",
+                    request_id,
+                    idx,
+                    list(r0.keys()) if isinstance(r0, dict) else "not_dict",
+                )
+                continue
             
             # Extract elevation and stairway information from steps
             has_stairs = False
