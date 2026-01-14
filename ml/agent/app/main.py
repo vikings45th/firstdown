@@ -137,6 +137,7 @@ async def generate(req: GenerateRouteRequest) -> GenerateRouteResponse:
         c.setdefault("theme", req.theme)
 
     # 3) Feature extraction
+    # 最大5個の候補をrankerに送信
     rep_routes_payload = []
     for i, c in enumerate(candidates[:5], start=1):
         cand = Candidate(
@@ -148,6 +149,8 @@ async def generate(req: GenerateRouteRequest) -> GenerateRouteResponse:
             bbox_area=0.5,
             path_length_ratio=1.3,
             turn_count=10 + i,
+            has_stairs=c.get("has_stairs", False),
+            elevation_gain_m=float(c.get("elevation_gain_m", 0.0)),
         )
         feats = calc_features(
             candidate=cand,

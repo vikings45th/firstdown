@@ -11,6 +11,59 @@ from app.settings import settings
 logger = logging.getLogger(__name__)
 
 
+async def _calculate_elevation_gain(encoded_polyline: str, api_key: str) -> float:
+    """
+    Elevation APIを使用して標高差を計算
+    
+    Args:
+        encoded_polyline: エンコードされたpolyline
+        api_key: Google Maps APIキー
+    
+    Returns:
+        累積標高差（m、上り方向のみ）
+    """
+    try:
+        # Elevation APIのエンドポイント
+        elevation_url = "https://maps.googleapis.com/maps/api/elevation/json"
+        
+        async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT_SEC) as client:
+            params = {
+                "locations": f"enc:{encoded_polyline}",
+                "key": api_key,
+            }
+            resp = await client.get(elevation_url, params=params)
+            
+            if resp.status_code != 200:
+                logger.warning(f"[Elevation API] HTTP error: status={resp.status_code}")
+                return 0.0
+            
+            data = resp.json()
+            if data.get("status") != "OK":
+                logger.warning(f"[Elevation API] API error: {data.get('status')}")
+                return 0.0
+            
+            results = data.get("results", [])
+            if len(results) < 2:
+                return 0.0
+            
+            # 累積標高差を計算（上り方向のみ）
+            elevation_gain = 0.0
+            prev_elevation = results[0].get("elevation", 0.0)
+            
+            for result in results[1:]:
+                current_elevation = result.get("elevation", 0.0)
+                elevation_diff = current_elevation - prev_elevation
+                if elevation_diff > 0:  # 上り方向のみ
+                    elevation_gain += elevation_diff
+                prev_elevation = current_elevation
+            
+            return elevation_gain
+            
+    except Exception as e:
+        logger.warning(f"[Elevation API] Error calculating elevation gain: {e}", exc_info=True)
+        return 0.0
+
+
 def _offset_latlng(lat: float, lng: float, distance_km: float, heading_deg: float) -> Dict[str, float]:
     """Roughly offset a point by distance_km toward heading_deg."""
     earth_radius_km = 6371.0
@@ -47,8 +100,9 @@ async def compute_route_candidates(
     if not api_key:
         raise RuntimeError("MAPS_API_KEY is not configured")
 
-    # Create 3 headings to diversify candidates
-    headings = [0, 120, -120]
+    # Create 5 headings to diversify candidates (360°を5等分)
+    # 0°, 72°, 144°, 216° (=-144°), 288° (=-72°) で均等に配置
+    headings = [0, 72, 144, -144, -72]
 
     # For round trips, use the computed points as a *turnaround waypoint*.
     # If distance_km is the target *loop distance*, the turnaround is roughly half.
@@ -57,8 +111,8 @@ async def compute_route_candidates(
     
     headers = {
         "X-Goog-Api-Key": api_key,
-        # Limit fields to reduce payload size
-        "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline",
+        # Include steps for stairway detection and elevation data
+        "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.navigationInstruction,routes.legs.steps.stepType",
     }
 
     async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT_SEC) as client:
@@ -121,11 +175,39 @@ async def compute_route_candidates(
                     duration_sec = float(duration[:-1])
                 except ValueError:
                     duration_sec = 0.0
+            
+            # Extract elevation and stairway information from steps
+            has_stairs = False
+            elevation_gain_m = 0.0
+            legs = r0.get("legs", [])
+            for leg in legs:
+                steps = leg.get("steps", [])
+                for step in steps:
+                    # Check for stairs in navigation instruction
+                    nav_instruction = step.get("navigationInstruction", {})
+                    instruction_text = nav_instruction.get("instructions", "").lower()
+                    if "stairs" in instruction_text or "階段" in instruction_text or "stair" in instruction_text:
+                        has_stairs = True
+                    
+                    # Check stepType for elevation changes
+                    step_type = step.get("stepType", "")
+                    # stepType might indicate elevation changes, but we'll calculate from elevation data if available
+            
+            # Calculate elevation gain from Elevation API if polyline is available
+            if encoded:
+                try:
+                    elevation_gain_m = await _calculate_elevation_gain(encoded, api_key)
+                except Exception as e:
+                    logger.warning(f"[Elevation API] Failed to calculate elevation gain: {e}", exc_info=True)
+                    elevation_gain_m = 0.0
+            
             if encoded and distance_m is not None:
                 results.append({
                     "route_id": f"route_{idx}",
                     "polyline": encoded,
                     "distance_km": float(distance_m) / 1000.0,
                     "duration_min": duration_sec / 60.0 if duration_sec else None,
+                    "has_stairs": has_stairs,
+                    "elevation_gain_m": elevation_gain_m,  # Will be calculated from elevation data if available
                 })
         return results
