@@ -53,8 +53,12 @@ async def generate_summary(
         return None
 
     dt = int((time.time() - t0) * 1000)
-    text = getattr(resp, "text", None)
+    # text = getattr(resp, "text", None)  # ← これが地雷
+    text, meta = extract_text_safely(resp)
+    print(f"[Vertex Gemini SDK Done] elapsed_ms={dt} text_len={len(text) if text else 0} meta={meta}")
+
     print(f"[Vertex Gemini SDK Done] elapsed_ms={dt} has_text={isinstance(text, str)} text_len={len(text) if isinstance(text,str) else 0}")
+
 
     if isinstance(text, str) and text.strip():
         return text.strip()
@@ -62,3 +66,40 @@ async def generate_summary(
     # 念のため raw を少しだけ
     print(f"[Vertex Gemini SDK Empty] resp_type={type(resp)} resp={str(resp)[:300]}")
     return None
+
+
+def extract_text_safely(resp: Any) -> Tuple[Optional[str], Dict[str, Any]]:
+    """
+    resp.text が ValueError を投げるケース（parts無し/ブロック等）でも落ちないで
+    text とメタ情報を返す。
+    """
+    meta: Dict[str, Any] = {}
+
+    candidates = getattr(resp, "candidates", None)
+    if not candidates:
+        meta["reason"] = "NO_CANDIDATES"
+        meta["usage_metadata"] = getattr(resp, "usage_metadata", None)
+        return None, meta
+
+    c0 = candidates[0]
+    meta["finish_reason"] = getattr(c0, "finish_reason", None)
+    meta["safety_ratings"] = getattr(c0, "safety_ratings", None)
+    meta["usage_metadata"] = getattr(resp, "usage_metadata", None)
+
+    content = getattr(c0, "content", None)
+    parts = getattr(content, "parts", None) if content else None
+    if not parts:
+        # ここが “content has no parts” / ブロック時の典型
+        meta["reason"] = "NO_PARTS"
+        return None, meta
+
+    texts = []
+    for p in parts:
+        t = getattr(p, "text", None)
+        if t:
+            texts.append(t)
+
+    out = "".join(texts).strip() if texts else None
+    if not out:
+        meta["reason"] = "EMPTY_TEXT"
+    return out, meta
