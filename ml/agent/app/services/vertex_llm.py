@@ -59,6 +59,7 @@ async def generate_summary(
 
     print(f"[Vertex Gemini SDK Done] elapsed_ms={dt} has_text={isinstance(text, str)} text_len={len(text) if isinstance(text,str) else 0}")
 
+
     if isinstance(text, str) and text.strip():
         return text.strip()
 
