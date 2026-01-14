@@ -120,6 +120,7 @@ async def search_spots(
             }
         },
         "maxResultCount": min(max_results, 20),  # maxResultCountは1-20の範囲
+        "languageCode": "ja",  # 日本語でレスポンスを取得
     }
     
     # themeが指定されている場合、includedTypesでフィルタリング

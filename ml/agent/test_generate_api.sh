@@ -1,0 +1,142 @@
+#!/bin/bash
+# generate APIを4つのテーマでテストするbashスクリプト（curl使用）
+#
+# 使用方法:
+#   bash test_generate_api.sh
+#   または
+#   ./test_generate_api.sh
+#
+# 環境変数:
+#   AGENT_URL: APIのベースURL（デフォルト: http://localhost:8000）
+#
+# 例:
+#   export AGENT_URL=https://agent-203786374782.asia-northeast1.run.app
+#   bash test_generate_api.sh
+
+set -euo pipefail
+
+# デフォルトのAPI URL
+AGENT_URL="${AGENT_URL:-http://localhost:8000}"
+
+# テーマのリスト
+THEMES=("exercise" "think" "refresh" "nature")
+
+# 東京周辺の緯度経度範囲（ランダム生成用）
+TOKYO_LAT_MIN=35.0
+TOKYO_LAT_MAX=36.0
+TOKYO_LNG_MIN=139.0
+TOKYO_LNG_MAX=140.0
+
+# 距離の範囲（km）
+DISTANCE_MIN=1.0
+DISTANCE_MAX=5.0
+
+# curlとjqが利用可能か確認
+if ! command -v curl &> /dev/null; then
+    echo "❌ エラー: curlがインストールされていません" >&2
+    exit 1
+fi
+
+if ! command -v jq &> /dev/null; then
+    echo "⚠️  警告: jqがインストールされていません。JSONの整形ができません。" >&2
+    JQ_CMD="cat"
+else
+    JQ_CMD="jq"
+fi
+
+# ランダムな開始地点を生成
+generate_random_location() {
+    local lat=$(awk "BEGIN { srand(); printf \"%.6f\", $TOKYO_LAT_MIN + rand() * ($TOKYO_LAT_MAX - $TOKYO_LAT_MIN) }")
+    local lng=$(awk "BEGIN { srand(); printf \"%.6f\", $TOKYO_LNG_MIN + rand() * ($TOKYO_LNG_MAX - $TOKYO_LNG_MIN) }")
+    echo "$lat $lng"
+}
+
+# ランダムな距離を生成（km）
+generate_random_distance() {
+    awk "BEGIN { srand(); printf \"%.1f\", $DISTANCE_MIN + rand() * ($DISTANCE_MAX - $DISTANCE_MIN) }"
+}
+
+# テーマをテスト
+test_theme() {
+    local theme=$1
+    local request_id="test-$(date +%s)-$RANDOM"
+    
+    # ランダムなパラメータを生成
+    local location=$(generate_random_location)
+    local lat=$(echo "$location" | cut -d' ' -f1)
+    local lng=$(echo "$location" | cut -d' ' -f2)
+    local distance_km=$(generate_random_distance)
+    local round_trip=true  # 固定値
+    local debug=false  # 固定値
+    
+    echo "============================================================"
+    echo "テーマ: $theme"
+    echo "開始地点: ($lat, $lng)"
+    echo "距離: ${distance_km}km"
+    echo "往復ルート: $round_trip"
+    echo "リクエストID: $request_id"
+    echo "============================================================"
+    
+    # JSONペイロードを作成
+    local json_payload=$(cat <<EOF
+{
+  "request_id": "$request_id",
+  "theme": "$theme",
+  "distance_km": $distance_km,
+  "start_location": {
+    "lat": $lat,
+    "lng": $lng
+  },
+  "round_trip": $round_trip,
+  "debug": $debug
+}
+EOF
+)
+    
+    # curlでAPIを呼び出し
+    local response
+    local status_code
+    response=$(curl -sS -w "\n%{http_code}" -X POST "$AGENT_URL/route/generate" \
+        -H "Content-Type: application/json" \
+        -d "$json_payload")
+    
+    status_code=$(echo "$response" | tail -n1)
+    response_body=$(echo "$response" | sed '$d')
+    
+    if [ "$status_code" -eq 200 ]; then
+        echo "✅ 成功 (HTTP $status_code)"
+        echo ""
+        echo "$response_body" | $JQ_CMD
+    else
+        echo "❌ エラー (HTTP $status_code)"
+        echo "$response_body"
+    fi
+    
+    echo ""
+}
+
+# メイン処理
+echo "🚀 Generate API テストスクリプト"
+echo "API URL: $AGENT_URL"
+echo "テスト対象テーマ: ${THEMES[*]}"
+echo ""
+
+# ヘルスチェック
+if ! curl -sS -f "$AGENT_URL/health" > /dev/null; then
+    echo "❌ ヘルスチェックエラー: APIが起動しているか確認してください" >&2
+    exit 1
+fi
+
+# 各テーマでテスト
+for theme in "${THEMES[@]}"; do
+    test_theme "$theme"
+    
+    # リクエスト間隔を空ける（API負荷軽減）
+    if [ "$theme" != "${THEMES[-1]}" ]; then
+        sleep 1
+    fi
+done
+
+echo "============================================================"
+echo "📋 テスト完了"
+echo "============================================================"
