@@ -80,40 +80,67 @@ def _debug_dump(resp: Any) -> str:
 
 
 def _fallback_summary(theme: str, distance_km: float, duration_min: float, spots: Optional[list]) -> str:
+    theme_natural = _theme_to_natural(theme)
     spots_text = ""
     if spots:
-        names = ", ".join(
-            s.get("name") for s in spots if isinstance(s, dict) and s.get("name")
-        )
+        names = []
+        for s in spots:
+            if isinstance(s, dict):
+                name = s.get("name")
+            else:
+                name = getattr(s, "name", None)
+            if name:
+                names.append(str(name))
         if names:
-            spots_text = f"（見どころ: {names}）"
-    return f"{theme}を楽しみながら約{distance_km:.1f}kmを{duration_min:.0f}分で歩ける、気軽な散歩コースです{spots_text}。"
+            spots_text = f"（見どころ: {', '.join(names)}）"
+    return f"{theme_natural}を楽しみながら約{distance_km:.1f}kmを{duration_min:.0f}分で歩ける、気軽な散歩コースです{spots_text}。"
+
+
+def _theme_to_natural(theme: str) -> str:
+    """Convert theme code to natural Japanese description."""
+    theme_map = {
+        "exercise": "運動やエクササイズ",
+        "think": "思考やリフレッシュ",
+        "refresh": "気分転換やリフレッシュ",
+        "nature": "自然や緑",
+    }
+    return theme_map.get(theme, theme)
 
 
 def _build_prompt(theme: str, distance_km: float, duration_min: float, spots: Optional[list], *, strict: bool) -> str:
+    # テーマを自然な日本語に変換
+    theme_natural = _theme_to_natural(theme)
+    
     spots_text = ""
     if spots:
-        names = ", ".join(
-            s.get("name") for s in spots if isinstance(s, dict) and s.get("name")
-        )
+        # SpotオブジェクトまたはDictの両方に対応
+        names = []
+        for s in spots:
+            if isinstance(s, dict):
+                name = s.get("name")
+            else:
+                name = getattr(s, "name", None)
+            if name:
+                names.append(str(name))
         if names:
-            spots_text = f" 見どころ: {names}。"
+            spots_text = f" ルート上には{', '.join(names)}などの見どころがあります。"
 
     if strict:
         # リトライ時：短く・強制
         return (
             "次の情報から、日本語で1文だけ（60文字前後）紹介文を作成してください。"
             "余計な説明は不要。必ず句点「。」で終える。"
-            f" テーマ:{theme} 距離:{distance_km:.1f}km 時間:{duration_min:.0f}分。"
+            f" 気分・目的: {theme_natural}。距離: 約{distance_km:.1f}km。"
+            f" 所要時間: 約{duration_min:.0f}分。"
             f"{spots_text}"
         )
 
-    # 通常時
+    # 通常時：より自然な文脈で
     return (
         "以下の散歩ルートの紹介文を日本語で1文だけ作成してください。"
         "（40〜70文字程度、丁寧で簡潔、句点「。」で終える）"
-        f" テーマ: {theme}。目安距離: {distance_km:.1f}km。"
-        f" 所要時間: {duration_min:.0f}分。"
+        f" 気分・目的: {theme_natural}を楽しみながら。"
+        f" 距離: 約{distance_km:.1f}km。所要時間: 約{duration_min:.0f}分。"
         f"{spots_text}"
     )
 

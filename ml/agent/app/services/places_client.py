@@ -27,7 +27,7 @@ async def search_spots(
 
     headers = {
         "X-Goog-Api-Key": api_key,
-        "X-Goog-FieldMask": "places.displayName,places.types",
+        "X-Goog-FieldMask": "places.id,places.displayName,places.types",
     }
     body = {
         "locationRestriction": {
@@ -54,10 +54,11 @@ async def search_spots(
             out: List[Dict[str, Any]] = []
             for p in places[:max_results]:
                 name = p.get("displayName", {}).get("text")
+                place_id = p.get("id")  # place_idを取得
                 types = p.get("types") or []
                 primary = types[0] if types else "unknown"
                 if name:
-                    out.append({"name": name, "type": primary})
+                    out.append({"name": name, "type": primary, "place_id": place_id})
             logger.info("[Places API] Found %d places near (%.6f, %.6f)", len(out), lat, lng)
             return out
     except httpx.TimeoutException as e:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import time
+import logging
 from typing import Dict, Any, List
 
 from fastapi import FastAPI, HTTPException
@@ -18,6 +19,8 @@ from app.services.feature_calc import Candidate, calc_features
 import polyline as polyline_lib
 
 app = FastAPI(title="firstdown Agent API", version="1.0.0")
+
+logger = logging.getLogger(__name__)
 
 
 @app.get("/health")
@@ -86,7 +89,7 @@ async def generate(req: GenerateRouteRequest) -> GenerateRouteResponse:
         if candidates:
             tools_used.append("maps_routes")
     except Exception as e:
-        print(f"maps_routes failed: {repr(e)}")
+        logger.warning("[Maps Routes Failed] request_id=%s err=%r", req.request_id, e)
 
     # --- Fallback処理 ---
     if not candidates:
@@ -105,7 +108,7 @@ async def generate(req: GenerateRouteRequest) -> GenerateRouteResponse:
         try:
             safe_polyline = polyline_lib.encode(fallback_points)
         except Exception as e:
-            print(f"[Fallback Polyline Error] request_id={req.request_id} err={repr(e)}")
+            logger.warning("[Fallback Polyline Error] request_id=%s err=%r", req.request_id, e)
             # エラー時も最小限のpolylineを生成（2点間の短い距離）
             try:
                 # より単純なフォールバック: 開始地点と少し離れた地点
@@ -162,15 +165,16 @@ async def generate(req: GenerateRouteRequest) -> GenerateRouteResponse:
         if score_map:
             tools_used.append("ranker")
         else:
-            # スコアが空だった場合も失敗とみなすならここに追加
-            # fallback_reasons.append("ranker_failed") 
-            pass
+            # スコアが空だった場合も失敗とみなす（422エラーや全ルート失敗時）
+            score_map = {}
+            fallback_reasons.append("ranker_failed")
+            logger.warning("[Ranker Empty] request_id=%s no scores returned", req.request_id)
             
     except Exception as e:
         score_map = {}
-        # 【修正】Ranker失敗として記録
+        # 【修正】Ranker失敗として記録（タイムアウト、ネットワークエラー等）
         fallback_reasons.append("ranker_failed")
-        print(f"[Ranker Error] request_id={req.request_id} err={repr(e)}")
+        logger.error("[Ranker Error] request_id=%s err=%r", req.request_id, e)
 
     # 5) Choose best
     chosen = fallback.choose_best_route(candidates, score_map, req.theme)
@@ -178,11 +182,13 @@ async def generate(req: GenerateRouteRequest) -> GenerateRouteResponse:
         raise HTTPException(status_code=422, detail="No viable route found")
 
     # 6) Summary and POIs
-    spots: List[Dict[str, Any]] = []
+    # polyline 25/50/75% 点から nearby 検索（decode + サンプル点抽出前提）
+    spots: List[Spot] = []
     try:
         encoded = (chosen.get("polyline") or "").strip()
         sample_latlngs: List[tuple[float, float]] = []
 
+        # polylineをデコードしてサンプル点（25/50/75%）を抽出
         if encoded and encoded != "xxxx":
             pts = polyline.decode_polyline(encoded)
             sample_latlngs = polyline.sample_points(pts, [0.25, 0.5, 0.75])
@@ -190,29 +196,59 @@ async def generate(req: GenerateRouteRequest) -> GenerateRouteResponse:
         if not sample_latlngs:
             sample_latlngs = [(float(req.start_location.lat), float(req.start_location.lng))]
 
+        # Places 重複排除: name（または place_id）基準
+        # Places 上限件数制御: 全体 max 件数（5件）が保証される
         merged: List[Dict[str, Any]] = []
         seen_names = set()
+        seen_place_ids = set()
+        max_spots = 5  # 全体の上限件数
+
         for (lat, lng) in sample_latlngs:
+            # 既に上限に達している場合は検索をスキップ
+            if len(merged) >= max_spots:
+                break
+            
             found = await places_client.search_spots(lat=float(lat), lng=float(lng), radius_m=800, max_results=3)
             for p in found:
+                # 上限に達したら終了
+                if len(merged) >= max_spots:
+                    break
+                
                 name = p.get("name")
-                if not name or name in seen_names:
+                place_id = p.get("place_id")
+                
+                # nameまたはplace_idが空の場合はスキップ
+                if not name:
                     continue
-                seen_names.add(name)
-                merged.append(p)
-            if len(merged) >= 5:
-                break
+                
+                # 重複チェック: place_id優先、なければnameで判定
+                is_duplicate = False
+                if place_id:
+                    if place_id in seen_place_ids:
+                        is_duplicate = True
+                    else:
+                        seen_place_ids.add(place_id)
+                else:
+                    # place_idがない場合はnameで判定
+                    if name in seen_names:
+                        is_duplicate = True
+                    else:
+                        seen_names.add(name)
+                
+                if not is_duplicate:
+                    merged.append(p)
 
-        spots_raw = merged[:5]
+        # 上限件数まで取得（既にmax_spots以下になっているはずだが、念のため）
+        spots_raw = merged[:max_spots]
         # DictをSpotオブジェクトに変換
         spots = [Spot(name=p.get("name", ""), type=p.get("type", "unknown")) for p in spots_raw if p.get("name")]
         if spots:
             tools_used.append("places")
-            print(f"[Places] request_id={req.request_id} found {len(spots)} spots: {[s.name for s in spots]}")
+            logger.info("[Places] request_id=%s found %d spots: %s", req.request_id, len(spots), [s.name for s in spots])
         else:
-            print(f"[Places] request_id={req.request_id} no spots found")
+            logger.info("[Places] request_id=%s no spots found", req.request_id)
     except Exception as e:
-        print(f"[Places Error] request_id={req.request_id} err={repr(e)}")
+        logger.error("[Places Error] request_id=%s err=%r", req.request_id, e)
         spots = []
 
     summary = "【簡易提案!】条件に合わせた散歩ルートです"
@@ -231,12 +267,12 @@ async def generate(req: GenerateRouteRequest) -> GenerateRouteResponse:
         else:
             # Vertexからの応答が空だった場合
             fallback_reasons.append("vertex_llm_failed")
-            print(f"[Vertex LLM Empty] request_id={req.request_id} (returned empty)")
+            logger.warning("[Vertex LLM Empty] request_id=%s (returned empty)", req.request_id)
 
     except Exception as e:
         # 【修正】LLM呼び出し例外発生時
         fallback_reasons.append("vertex_llm_failed")
-        print(f"[Vertex LLM Error] request_id={req.request_id} err={repr(e)}")
+        logger.error("[Vertex LLM Error] request_id=%s err=%r", req.request_id, e)
 
     total_latency_ms = int((time.time() - t0) * 1000)
 
@@ -265,6 +301,32 @@ async def generate(req: GenerateRouteRequest) -> GenerateRouteResponse:
     if req.debug:
         meta["plan"] = plan_steps
         meta["retry_policy"] = retry_policy
+        # routes / places / ranker の内訳を追加
+        meta["debug"] = {
+            "routes": {
+                "candidates_count": len(candidates),
+                "candidates": [
+                    {
+                        "route_id": c.get("route_id"),
+                        "distance_km": c.get("distance_km"),
+                        "duration_min": c.get("duration_min"),
+                    }
+                    for c in candidates[:5]
+                ],
+                "chosen_route_id": chosen.get("route_id"),
+            },
+            "places": {
+                "spots_count": len(spots),
+                "spots": [{"name": s.name, "type": s.type} for s in spots] if spots else [],
+            },
+            "ranker": {
+                "scores_count": len(score_map),
+                "scores": [
+                    {"route_id": route_id, "score": score}
+                    for route_id, score in sorted(score_map.items(), key=lambda x: x[1], reverse=True)
+                ],
+            },
+        }
 
     return GenerateRouteResponse(
         request_id=req.request_id,

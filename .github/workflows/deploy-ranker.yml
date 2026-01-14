@@ -45,7 +45,7 @@ jobs:
             --region asia-northeast1 \
             --platform managed \
             --allow-unauthenticated \
-            --timeout=3 \
+            --timeout=30 \
             --memory=512Mi \
             --cpu=1 \
             --concurrency=10
