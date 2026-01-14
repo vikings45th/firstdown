@@ -112,7 +112,7 @@ async def compute_route_candidates(
     headers = {
         "X-Goog-Api-Key": api_key,
         # Include steps for stairway detection and elevation data
-        "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.navigationInstruction",
+        "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.steps.navigationInstruction,routes.legs.steps.stepType",
     }
 
     async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT_SEC) as client:
@@ -197,6 +197,10 @@ async def compute_route_candidates(
                             maneuver_lower = maneuver.lower()
                             if "stairs" in maneuver_lower or "階段" in maneuver_lower or "stair" in maneuver_lower:
                                 has_stairs = True
+                    
+                    # Check stepType for elevation changes
+                    step_type = step.get("stepType", "")
+                    # stepType might indicate elevation changes, but we'll calculate from elevation data if available
             
             # Calculate elevation gain from Elevation API if polyline is available
             if encoded:
