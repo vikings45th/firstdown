@@ -78,21 +78,29 @@ test_theme() {
     local lng=$(echo "$location" | cut -d' ' -f2)
     local distance_km=$(generate_random_distance)
     local debug=false  # 固定値
-    local end_location=$(generate_random_location)
-    local end_lat=$(echo "$end_location" | cut -d' ' -f1)
-    local end_lng=$(echo "$end_location" | cut -d' ' -f2)
+    local end_lat=""
+    local end_lng=""
+
+    if [ "$round_trip" = "false" ]; then
+        local end_location=$(generate_random_location)
+        end_lat=$(echo "$end_location" | cut -d' ' -f1)
+        end_lng=$(echo "$end_location" | cut -d' ' -f2)
+    fi
     
     echo "============================================================"
     echo "テーマ: $theme"
     echo "開始地点: ($lat, $lng)"
     echo "距離: ${distance_km}km"
     echo "往復ルート: $round_trip"
-    echo "終了地点: ($end_lat, $end_lng)"
+    if [ "$round_trip" = "false" ]; then
+        echo "終了地点: ($end_lat, $end_lng)"
+    fi
     echo "リクエストID: $request_id"
     echo "============================================================"
     
     # JSONペイロードを作成
-    local json_payload=$(cat <<EOF
+    if [ "$round_trip" = "false" ]; then
+        local json_payload=$(cat <<EOF
 {
   "request_id": "$request_id",
   "theme": "$theme",
@@ -110,6 +118,22 @@ test_theme() {
 }
 EOF
 )
+    else
+        local json_payload=$(cat <<EOF
+{
+  "request_id": "$request_id",
+  "theme": "$theme",
+  "distance_km": $distance_km,
+  "start_location": {
+    "lat": $lat,
+    "lng": $lng
+  },
+  "round_trip": $round_trip,
+  "debug": $debug
+}
+EOF
+)
+    fi
     
     # curlでAPIを呼び出し
     local response
