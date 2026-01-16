@@ -22,7 +22,7 @@ Agent APIは、ユーザーのリクエストに基づいて最適な散歩ル�
 - **片道/周回ルート**: `round_trip`で周回/片道を切り替え（片道は`end_location`必須）
 - **ルート最適化**: Ranker APIを使用したルート品質評価とランキング
 - **スポット検索**: ルート上の見どころスポットを自動検索（日本語対応）
-- **AI紹介文・タイトル生成**: Vertex AIで紹介文とタイトルを生成
+- **AI紹介文・タイトル生成**: Jinjaテンプレート + 構造化出力で安定生成
 - **ナビ用代表点**: polylineを簡略化して最大10点の`nav_waypoints`を返却
 - **フォールバック機能**: 外部API障害時も簡易ルートを提供
 
@@ -36,6 +36,11 @@ Agent APIは、ユーザーのリクエストに基づいて最適な散歩ル�
 6. **紹介文・タイトル生成**: Vertex AIで紹介文とタイトルを生成
 7. **nav_waypoints生成**: polyline簡略化 → 最大10点を抽出
 8. **レスポンス返却**: ルート情報、スポット、紹介文、タイトルを返却
+
+### プロンプトテンプレート
+
+- `app/prompts/description.jinja`: 紹介文の制約（JSON形式、文字数、句点など）
+- `app/prompts/title.jinja`: タイトルの制約（JSON形式、文字数、使用記号）
 
 ## 環境変数
 
@@ -59,6 +64,7 @@ Agent APIは、ユーザーのリクエストに基づいて最適な散歩ル�
 | `VERTEX_MAX_OUTPUT_TOKENS` | `256` | Vertex AIの最大出力トークン数 |
 | `VERTEX_TOP_P` | `0.95` | Vertex AIのtop_pパラメータ |
 | `VERTEX_TOP_K` | `40` | Vertex AIのtop_kパラメータ |
+| `VERTEX_FORBIDDEN_WORDS` | `""` | 禁止ワード（カンマ区切り） |
 | `BQ_DATASET` | `firstdown_mvp` | BigQueryデータセット名 |
 | `BQ_TABLE_REQUEST` | `route_request` | BigQueryリクエストテーブル名 |
 | `BQ_TABLE_CANDIDATE` | `route_candidate` | BigQuery候補テーブル名 |

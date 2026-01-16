@@ -21,7 +21,7 @@ firstdownは、ユーザーの好みに応じて最適な散歩ルートを生�
 ### 主な機能
 
 - **テーマ別ルート生成**: 4つのテーマ（exercise, think, refresh, nature）に対応
-- **AIによる紹介文生成**: Vertex AIを使用した自然なルート説明
+- **AIによる紹介文・タイトル生成**: Vertex AI + 構造化出力で安定した文面を生成
 - **スポット検索**: ルート上の見どころスポットを自動検索（日本語対応）
 - **ルート最適化**: 機械学習によるルート品質評価とランキング
 - **フォールバック機能**: 外部API障害時も簡易ルートを提供
@@ -52,7 +52,7 @@ firstdownは、ユーザーの好みに応じて最適な散歩ルートを生�
        ├──► Maps Routes API ──► ルート候補生成
        ├──► Places API ──────► スポット検索
        ├──► Ranker API ──────► ルート評価
-       ├──► Vertex AI ───────► 紹介文生成
+       ├──► Vertex AI ───────► 紹介文・タイトル生成
        └──► BigQuery ────────► ログ・分析
 ```
 
@@ -76,6 +76,7 @@ firstdown/
 │   │   │   ├── main.py     # FastAPIアプリケーション
 │   │   │   ├── schemas.py  # データスキーマ
 │   │   │   ├── settings.py # 設定管理
+│   │   │   ├── prompts/    # Vertex AIプロンプト（Jinja）
 │   │   │   └── services/   # 各種サービス
 │   │   │       ├── maps_routes_client.py
 │   │   │       ├── places_client.py

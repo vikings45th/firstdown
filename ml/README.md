@@ -60,6 +60,8 @@
        │
        ├──► Vertex AI ───────► 紹介文・タイトル生成
        │                        - モデル: gemini-2.5-flash
+       │                        - 構造化出力（JSON）
+       │                        - 禁止語フィルタ対応
        │                        - フォールバック機能あり
        │
        └──► BigQuery ────────► ログ・分析データ保存
@@ -76,7 +78,7 @@
 3. **ルート評価**: Ranker APIでスコアリング
 4. **最適ルート選択**: スコアが最も高いルートを選択
 5. **スポット検索**: ルート上の25/50/75%地点からスポットを検索
-6. **紹介文・タイトル生成**: Vertex AIでルート紹介文とタイトルを生成
+6. **紹介文・タイトル生成**: Jinjaテンプレート + 構造化出力で生成
 7. **nav_waypoints生成**: polyline簡略化 → 最大10点を抽出
 8. **レスポンス返却**: ルート情報、スポット、紹介文、タイトルを返却
 
@@ -102,6 +104,7 @@
 | `MAPS_API_KEY` | Google Maps Platform API Key | Agent APIのみ |
 | `VERTEX_PROJECT` | Google Cloud Project ID | Agent APIのみ |
 | `VERTEX_LOCATION` | Vertex AI リージョン | Agent APIのみ |
+| `VERTEX_FORBIDDEN_WORDS` | 禁止ワード（カンマ区切り） | Agent APIのみ |
 
 ## API Key 管理
 
@@ -143,6 +146,7 @@
 - デフォルト: `gemini-2.5-flash`
 - 温度パラメータ: `0.3`
 - 最大出力トークン: `256`
+- 禁止ワード: `VERTEX_FORBIDDEN_WORDS` を使用（カンマ区切り）
 
 ## テスト
 
