@@ -1,5 +1,5 @@
 from typing import List, Literal, Optional
-from pydantic import BaseModel, Field, conint, confloat
+from pydantic import BaseModel, Field, conint, confloat, field_validator
 
 
 # テーマの型定義（散歩の目的・雰囲気）
@@ -29,6 +29,38 @@ class Spot(BaseModel):
     """見どころスポットの情報"""
     name: str  # スポット名
     type: str  # スポットタイプ（例: "park", "cafe"）
+
+
+class TitleResponse(BaseModel):
+    """タイトル生成の構造化出力"""
+    title: str = Field(..., min_length=8, max_length=20)
+
+    @field_validator("title")
+    @classmethod
+    def normalize_title(cls, v: str) -> str:
+        t = v.strip()
+        if "\n" in t:
+            t = t.splitlines()[0].strip()
+        for q in ("「", "」", '"', "'"):
+            t = t.strip(q)
+        if t.endswith("。"):
+            raise ValueError("title must not end with a period")
+        return t
+
+
+class DescriptionResponse(BaseModel):
+    """紹介文生成の構造化出力"""
+    description: str = Field(..., min_length=80, max_length=120)
+
+    @field_validator("description")
+    @classmethod
+    def normalize_description(cls, v: str) -> str:
+        t = v.strip()
+        if "\n" in t:
+            t = t.replace("\n", " ").strip()
+        if not t.endswith("。"):
+            raise ValueError("description must end with a period")
+        return t
 
 
 class RouteOut(BaseModel):
