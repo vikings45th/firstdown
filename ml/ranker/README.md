@@ -58,6 +58,7 @@ Ranker APIは、Agent APIから送信されたルート候補を評価し、ス�
 
 **制約:**
 - `routes`: 1件以上5件以下
+- `features`: 任意キーを許容（未使用のキーは無視）
 
 **レスポンス (`RankResponse`):**
 
