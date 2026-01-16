@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     VERTEX_MAX_OUTPUT_TOKENS: float = 256  # 最大出力トークン数
     VERTEX_TOP_P: float = 0.95  # Top-pサンプリングパラメータ
     VERTEX_TOP_K: int = 40  # Top-kサンプリングパラメータ
+    VERTEX_FORBIDDEN_WORDS: str = ""  # 禁止ワード（カンマ区切り）
 
     # BigQuery
     BQ_DATASET: str = "firstdown_mvp"  # BigQueryデータセット名
