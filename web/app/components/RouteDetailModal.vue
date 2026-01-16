@@ -1,12 +1,18 @@
 <script setup lang="ts">
+interface LatLng {
+  lat: number;
+  lng: number;
+}
+
 interface Route {
-  theme?: string;
-  title?: string;
-  polyline?: Array<{ lat: number; lng: number }>;
-  summary?: string;
-  distance_km?: number;
-  duration_min?: number;
-  spots: Array<{ name?: string; type?: string }>;
+  route_id: string;
+  polyline: LatLng[];
+  distance_km: number;
+  duration_min: number;
+  title: string;
+  summary: string;
+  nav_waypoints: LatLng[];
+  spots: { name?: string; type?: string }[];
 }
 
 const props = defineProps<{
@@ -39,7 +45,7 @@ function destroyMap() {
   }
 }
 
-function initMap() {
+const initMap = () => {
   const mapElement = document.getElementById("route-map");
   if (!mapElement || !(window as any).google) {
     return;

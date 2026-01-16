@@ -5,18 +5,26 @@ const props = defineProps<{
   distance? : number;
 }>();
 
+interface LatLng {
+  lat: number;
+  lng: number;
+}
+
+interface ApiRequest {
+  request_id: string;
+  theme: string;
+  distance_km: number;
+  start_location: LatLng;
+  end_location: LatLng;
+  round_trip: boolean;
+  debug: boolean;
+}
+
 interface ApiResponse {
   statusCode: number;
   body: {
     request_id: string;
-    route: {
-      route_id: string;
-      polyline: Array<{ lat: number; lng: number }>;
-      distance_km: number;
-      duration_min: number;
-      summary: string;
-      spots: Array<{ name: string; type: string }>;
-    };
+    route: Route;
     meta: any;
   };
 }
@@ -24,13 +32,13 @@ interface ApiResponse {
 // ルート情報の型
 interface Route {
   route_id: string;
-  polyline: Array<{ lat: number; lng: number }>;
+  polyline: LatLng[];
   distance_km: number;
   duration_min: number;
-  summary: string;
-  spots: Array<{ name?: string; type?: string }>;
-  theme: string;
   title: string;
+  summary: string;
+  nav_waypoints: LatLng[];
+  spots: { name?: string; type?: string }[];
 }
 
 const route = ref<Route | null>(null);
@@ -38,12 +46,21 @@ const open = ref(false)
 const themeItems = ref(['exercise', 'think', 'refresh', 'nature']);
 const theme = ref(props.theme ?? 'exercise');
 const distance = ref(Number(props.distance ?? 5));
-const currentLat = ref<number | null>(null);
-const currentLng = ref<number | null>(null);
+const currentLat = ref<number>(35.685175);
+const currentLng = ref<number>(139.752799);
+const startLat = ref<number>(35.685175);
+const startLng = ref<number>(139.752799);
+const endLat = ref<number>(35.685175);
+const endLng = ref<number>(139.752799)
 const locationError = ref<string | null>(null);
 
 const loadingApi = ref(false)
 const loadingLocation = ref(false);
+
+const accordionItems = [
+{ label: "開始地点", key: "start" },
+{ label: "終了地点", key: "end" },
+]
   
 const emit = defineEmits<{
   submit: [theme: string, distance: number];
@@ -55,28 +72,46 @@ watch([theme, distance], ([m, d]) => {
 
 onMounted(async() => {
   await fetchCurrentLocation();
+  setCurrentLatlng();
 
   if(props.theme && props.distance){
     callApi();
   }
 })
 
-const callApi = async()=> {
-  loadingApi.value = true;
+const setCurrentLatlng = () => {
+  startLat.value = currentLat.value;
+  startLng.value = currentLng.value;
+  endLat.value = currentLat.value;
+  endLng.value = currentLng.value;
+}
 
-  const jsonPayload = {
+const setJsonPayload = (): ApiRequest => {
+
+  //緯度 0.001° ≒ 111m、経度 0.001° ≒ 91m
+  const flag:boolean = Math.abs(startLat.value - endLat.value) < 0.001 && Math.abs(startLng.value - endLng.value) < 0.001
+
+  return {
     request_id: crypto.randomUUID(),
     theme: theme.value,
     distance_km: distance.value,
     start_location: {
-      lat: currentLat.value,
-      lng: currentLng.value
+      lat: startLat.value,
+      lng: startLng.value
     },
-    round_trip: true,
+    end_location: {
+      lat: endLat.value,
+      lng: endLng.value
+    },
+    round_trip: flag,
     debug: false
   };
+}
 
-  console.log(jsonPayload)
+const callApi = async()=> {
+  loadingApi.value = true;
+
+  const jsonPayload:ApiRequest = setJsonPayload();
 
   try{
     const apiResponse = await $fetch<ApiResponse>("/api/fetch-ai", {//apiResponse={statusCode: 200,body: response}
@@ -84,13 +119,7 @@ const callApi = async()=> {
       body: jsonPayload,
     });
 
-    route.value = {
-      // バックエンドから返ってきた route 情報
-      ...apiResponse.body.route,
-      // ここでフロント側で欲しいフィールドを追加
-      theme: `${theme.value}な気分`,
-      title: "静寂のリバーサイドウォーク",
-    };
+    route.value = apiResponse.body.route;
 
     loadingApi.value = false;
     open.value = true;
@@ -139,10 +168,10 @@ const regenerate = async() =>{
 
 const startNavigation = () => {
   // route が無い / polyline が空なら何もしない
-  if (!route.value || !route.value.polyline || route.value.polyline.length < 2){
+  if (!route.value || !route.value.nav_waypoints || route.value.nav_waypoints.length < 2){
     return;
   }else{
-    const points = route.value.polyline;
+    const points = route.value.nav_waypoints;
     const origin = points[0]!;
     const destination = points[points.length - 1]!;
     const waypoints = points
@@ -210,34 +239,55 @@ const startNavigation = () => {
     />
     <div v-if="props.detailed">
       <div class="space-y-2 mb-2">
-        <p class="text-sm font-semibold text-gray-700 tracking-wide">出発・終了地点</p>
-        <p class="text-xs text-gray-500">現在地をもとに、ぐるっと一周できるルートをつくります。</p>
+        <p class="text-sm font-semibold text-gray-700 tracking-wide">どこからどこまで？</p>
+        <p class="text-xs text-gray-500">現在地をもとに開始地点と終了地点を指定します。</p>
       </div>
-      <div class="mb-3 flex flex-col gap-2 rounded-lg bg-gray-50 px-3 py-2 border border-gray-100">
-        <div class="flex items-center justify-between gap-2">
-          <p class="text-xs text-gray-600">ブラウザから現在地を取得します。</p>
-          <UButton
-            size="xs"
-            color="primary"
-            :loading="loadingLocation"
-            @click="fetchCurrentLocation"
-          >
-            現在地を取得
-          </UButton>
-        </div>
-        <div class="text-sm text-gray-600">
-          現在地: 
-          <span v-if="currentLat !== null && currentLng !== null">
-            {{ currentLat }}, {{ currentLng }}
-          </span>
-          <span v-else>未取得</span>
-        </div>
-        <div v-if="locationError" class="text-xs text-red-500">
-          {{ locationError }}
-        </div>
-      </div>
+      <UButton
+          size="xs"
+          color="primary"
+          :loading="loadingLocation"
+          @click="fetchCurrentLocation"
+      >
+        現在地を取得
+      </UButton>
+      <UAccordion v-if="!loadingLocation" type="multiple" :items="accordionItems">
+        <template #content="{ item }">
+          <div class="space-y-3 pb-4">
+            <!-- 開始地点 -->
+            <template v-if="item.key === 'start'">
+              <UInput
+                v-model.number="startLat"
+                type="number"
+                step="0.000001"
+                placeholder="開始地点の緯度"
+              />
+              <UInput
+                v-model.number="startLng"
+                type="number"
+                step="0.000001"
+                placeholder="開始地点の経度"
+              />
+            </template>
+            <!-- 終了地点 -->
+            <template v-else-if="item.key === 'end'">
+              <UInput
+                v-model.number="endLat"
+                type="number"
+                step="0.000001"
+                placeholder="終了地点の緯度"
+              />
+              <UInput
+                v-model.number="endLng"
+                type="number"
+                step="0.000001"
+                placeholder="終了地点の経度"
+              />
+            </template>
+          </div>
+        </template>
+      </UAccordion>
       <UButton 
-        color="primary" 
+        color="secondary"
         label="ルートを生成" 
         :loading="loadingApi"
         class="w-full mt-2"
@@ -252,7 +302,7 @@ const startNavigation = () => {
       variant: 'outline',
       class: 'rounded-full'
     }"
-    v-model:open="open" fullscreen :transition="true" :title="route?.title" :description="route?.theme" v-if="route">
+    v-model:open="open" fullscreen :transition="true" :title="route?.title" v-if="route">
     <template #body>
       <RouteDetailModal :route="route" :is-open="open" />
     </template>
