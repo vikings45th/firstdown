@@ -1,19 +1,26 @@
-interface ApiResponse {
+interface LatLng {
+  lat: number;
+  lng: number;
+}
+
+interface AgentResponse {
   request_id: string;
   route: {
     route_id: string;
     polyline: string;
     distance_km: number;
     duration_min: number;
+    title: string;
     summary: string;
-    spots: Array<{ name?: string; type?: string }>;
+    nav_waypoints: LatLng[];
+    spots: { name?: string; type?: string }[];
   };
   meta: any;
 }
 
 // polylineデコード関数（Google Polyline Encoding Algorithm）
-function decodePolyline(encoded: string): Array<{ lat: number; lng: number }> {
-  const poly: Array<{ lat: number; lng: number }> = [];
+function decodePolyline(encoded: string): LatLng[] {
+  const poly: LatLng[] = [];
   let index = 0;
   const len = encoded.length;
   let lat = 0;
@@ -48,25 +55,23 @@ function decodePolyline(encoded: string): Array<{ lat: number; lng: number }> {
 }
 
 export default defineEventHandler(async (event) => {
-  const requestBody = await readBody(event); //requestBody: jsonPayload,
+  const requestBody = await readBody(event); //requestBody: ApiRequest,
   /*
-    const jsonPayload = {
-      request_id: crypto.randomUUID(),
-      theme: theme.value,
-      distance_km: distance.value,
-      start_location: {
-        lat: 35.6109,
-        lng: 139.6263
-      },
-      round_trip: true,
-      debug: false
-    };
+    interface ApiRequest {
+      request_id: string;
+      theme: string;
+      distance_km: number;
+      start_location: LatLng;
+      end_location: LatLng;
+      round_trip: boolean;
+      debug: boolean;
+    }
   */
 
   const apiUrl = "https://agent-203786374782.asia-northeast1.run.app/route/generate";
   try {
-    // GETリクエスト
-    const response = await $fetch<ApiResponse>(apiUrl, {
+    // POSTリクエスト
+    const response = await $fetch<AgentResponse>(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
