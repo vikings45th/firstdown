@@ -6,9 +6,22 @@
     layout: 'app',
   })
 
+  // UUID生成関数（SSR安全）
+  const generateUUID = (): string => {
+    if (process.client && typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    // SSR時やcrypto.randomUUIDが使えない場合のフォールバック
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
+
   // 初期値を作成
   const getDefaultPayload = (): ApiRequest => ({
-    request_id: crypto.randomUUID(),
+    request_id: generateUUID(),
     theme: 'exercise',
     distance_km: 5,
     start_location: {lat: 35.685175,lng: 139.752799},
@@ -20,8 +33,10 @@
   // useStateから検索条件を取得、なければ初期値を使用して保存
   const savedPayload = useState<ApiRequest>('searchPayload', () => getDefaultPayload());
   
-  // reactiveでjsonPayloadを作成（savedPayload.valueは確実に存在する）
-  const jsonPayload = reactive<ApiRequest>({ ...savedPayload.value });
+  // reactiveでjsonPayloadを作成（savedPayload.valueが存在することを確認）
+  const jsonPayload = reactive<ApiRequest>(
+    savedPayload.value ? { ...savedPayload.value } : getDefaultPayload()
+  );
 
   // jsonPayloadの変更をuseStateに保存
   watch(jsonPayload, (newPayload) => {
