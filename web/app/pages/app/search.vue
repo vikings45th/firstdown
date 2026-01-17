@@ -6,19 +6,22 @@
     layout: 'app',
   })
 
-  // useStateから検索条件を取得、なければ初期値を使用
-  const savedPayload = useState<ApiRequest>('searchPayload');
-  const jsonPayload = reactive<ApiRequest>(
-    savedPayload.value || {
-      request_id: crypto.randomUUID(),
-      theme: 'exercise',
-      distance_km: 5,
-      start_location: {lat: 35.685175,lng: 139.752799},
-      end_location: {lat: 35.685175,lng: 139.752799},
-      round_trip: true,
-      debug: false
-    }
-  );
+  // 初期値を作成
+  const getDefaultPayload = (): ApiRequest => ({
+    request_id: crypto.randomUUID(),
+    theme: 'exercise',
+    distance_km: 5,
+    start_location: {lat: 35.685175,lng: 139.752799},
+    end_location: {lat: 35.685175,lng: 139.752799},
+    round_trip: true,
+    debug: false
+  });
+
+  // useStateから検索条件を取得、なければ初期値を使用して保存
+  const savedPayload = useState<ApiRequest>('searchPayload', () => getDefaultPayload());
+  
+  // reactiveでjsonPayloadを作成（savedPayload.valueは確実に存在する）
+  const jsonPayload = reactive<ApiRequest>({ ...savedPayload.value });
 
   // jsonPayloadの変更をuseStateに保存
   watch(jsonPayload, (newPayload) => {
