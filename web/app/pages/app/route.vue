@@ -1,5 +1,4 @@
 <script setup lang="ts">
-  import type { ApiRequest, Route } from '~/types/route';
   import { useRouteApi } from '~/composables/useRouteApi';
   import { useGenerateRequestid } from '~/composables/useGenerateRequestid';
 
@@ -9,8 +8,8 @@
   const { fetchRoute } = useRouteApi();
   const { generateRequestid } = useGenerateRequestid();
 
-  const routeState = useState<Route>('currentRoute');
-  const searchParamsState = useState<ApiRequest>('searchParams');
+  const searchParamsState = useSearchParams();
+  const routeState = useWalkingRoutes();
 
   const loadingRegenerate = ref(false);
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import type { ApiRequest, Route } from '~/types/route';
+  import type { ApiRequest } from '~/types/route';
   import { useRouteApi } from '~/composables/useRouteApi';
   import { useGenerateRequestid } from '~/composables/useGenerateRequestid';
 
@@ -17,7 +17,7 @@
   const themeItems = ref(['exercise', 'think', 'refresh', 'nature']);
   // 検索条件の初期値を作成
   const searchParams = ref<ApiRequest>({
-    request_id: generateRequestid(),
+    request_id: "initialSearchParamsStateRequestId",
     theme: 'exercise',
     distance_km: 5,
     start_location: {lat: 35.685175,lng: 139.752799},
@@ -30,8 +30,8 @@
   const loadingLocation = ref<boolean>(false);
   const loadingApi = ref<boolean>(false);
   
-  const searchParamsState = useState<ApiRequest>('searchParams');
-  const routeState = useState<Route>('currentRoute');
+  const searchParamsState = useSearchParams();
+  const routeState = useWalkingRoutes();
 
   const fetchCurrentLocation = (): Promise<void> => {
     if (!navigator.geolocation) {
@@ -65,6 +65,8 @@
 
   const callApi = async () => {
     loadingApi.value = true;
+
+    searchParams.value.request_id = generateRequestid();
 
     //現状startとendの位置は一致させてる。
     //round_tripの計算: 緯度 0.001° ≒ 111m、経度 0.001° ≒ 91m
