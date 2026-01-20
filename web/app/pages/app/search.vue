@@ -15,7 +15,7 @@
 
   // 初期値を作成
   const getDefaultPayload = (): ApiRequest => ({
-    request_id: generateUUID(),
+    request_id: "initialpayloadrequestidvalue",
     theme: 'exercise',
     distance_km: 5,
     start_location: {lat: 35.685175,lng: 139.752799},
@@ -32,11 +32,10 @@
   const routeState = useState('currentRoute');
 
   const callApi = async () => {
-    if (!jsonPayload.value) {
-      console.error('jsonPayload is undefined');
-      return;
-    }
     loadingApi.value = true;
+    
+    //useStateは初期化時点で関数を入れられないため、ここでrequest_idを代入
+    jsonPayload.value.request_id = generateUUID();
 
     try {
       const route = await fetchRoute(jsonPayload.value);
