@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     VERTEX_TOP_K: int = 40  # Top-kサンプリングパラメータ
     VERTEX_FORBIDDEN_WORDS: str = ""  # 禁止ワード（カンマ区切り）
 
+    # Places API（コスト最適化）
+    PLACES_RADIUS_M: int = 300  # 検索半径（m）
+    PLACES_MAX_RESULTS: int = 2  # 1地点あたりの最大件数
+    PLACES_SAMPLE_POINTS_MAX: int = 1  # 検索地点数（サンプル点の上限）
+
     # BigQuery
     BQ_DATASET: str = "firstdown_mvp"  # BigQueryデータセット名
     BQ_TABLE_REQUEST: str = "route_request"  # リクエストテーブル名
