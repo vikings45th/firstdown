@@ -216,16 +216,17 @@ async def compute_route_candidates(
                         break
 
             # 2) 三角ループ（従来型）
-            for h in headings:
-                if len(dests) >= max_candidates:
-                    break
-                dist_scale = random.uniform(0.85, 1.15)
-                distance_km_jitter = waypoint_distance_km * dist_scale
-                angle_shift = random.uniform(35.0, 75.0)
-                p1 = _offset_latlng(start_lat, start_lng, distance_km_jitter, h)
-                p2 = _offset_latlng(start_lat, start_lng, distance_km_jitter, h + angle_shift)
-                p3 = _offset_latlng(start_lat, start_lng, distance_km_jitter, h - angle_shift)
-                add_waypoints("triangle", [p1, p2, p3])
+            if len(dests) < max_candidates:
+                for h in headings:
+                    if len(dests) >= max_candidates:
+                        break
+                    dist_scale = random.uniform(0.85, 1.15)
+                    distance_km_jitter = waypoint_distance_km * dist_scale
+                    angle_shift = random.uniform(35.0, 75.0)
+                    p1 = _offset_latlng(start_lat, start_lng, distance_km_jitter, h)
+                    p2 = _offset_latlng(start_lat, start_lng, distance_km_jitter, h + angle_shift)
+                    p3 = _offset_latlng(start_lat, start_lng, distance_km_jitter, h - angle_shift)
+                    add_waypoints("triangle", [p1, p2, p3])
 
             # 3) 直線的な往復（アウト&バック）
             if len(dests) < max_candidates:
