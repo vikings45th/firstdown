@@ -4,6 +4,7 @@ import logging
 import time
 import uuid
 import random
+import math
 from typing import Any, Dict, List, Optional, TypedDict
 
 import polyline as polyline_lib
@@ -230,6 +231,29 @@ def _spot_type_diversity(places: List[Dict[str, Any]]) -> float:
     return max(0.0, 1.0 - (max_count / len(types)))
 
 
+def _filter_places_by_route_distance(
+    places: List[Dict[str, Any]],
+    decoded_points: List[tuple[float, float]],
+    max_distance_m: float,
+    max_spots: int,
+) -> List[Dict[str, Any]]:
+    if not places or not decoded_points:
+        return places[:max_spots]
+
+    scored: List[tuple[float, Dict[str, Any]]] = []
+    for p in places:
+        lat = p.get("lat")
+        lng = p.get("lng")
+        if lat is None or lng is None:
+            continue
+        dist_m = polyline.distance_to_path_m(decoded_points, (float(lat), float(lng)))
+        if dist_m <= max_distance_m:
+            scored.append((dist_m, p))
+
+    scored.sort(key=lambda x: x[0])
+    return [p for _, p in scored[:max_spots]]
+
+
 def _detour_allowance_m(distance_km: float) -> float:
     if distance_km <= 3.0:
         return 150.0
@@ -238,6 +262,15 @@ def _detour_allowance_m(distance_km: float) -> float:
     if distance_km <= 10.0:
         return 400.0
     return 600.0
+
+
+def _haversine_m(a: LatLng, b: LatLng) -> float:
+    lat1 = math.radians(a.lat)
+    lat2 = math.radians(b.lat)
+    dlat = lat2 - lat1
+    dlng = math.radians(b.lng - a.lng)
+    h = math.sin(dlat / 2.0) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlng / 2.0) ** 2
+    return 2.0 * 6371000.0 * math.asin(min(1.0, math.sqrt(h)))
 
 
 async def _collect_places_two_phase(
@@ -657,12 +690,13 @@ async def fetch_places(state: AgentState) -> Dict[str, Any]:
     req = state["request"]
     tools_used = list(state["tools_used"])
     sample_points = state["sample_points"]
+    decoded_points = state.get("decoded_points") or []
     status = "error"
     error: Optional[str] = None
     places: List[Dict[str, Any]] = []
 
     try:
-        _, places = await _collect_places_two_phase(
+        merged, selected = await _collect_places_two_phase(
             request_id=req.request_id,
             theme=req.theme,
             sample_points=sample_points,
@@ -670,6 +704,22 @@ async def fetch_places(state: AgentState) -> Dict[str, Any]:
             radius_m=800,
             max_results=3,
         )
+        places = selected
+        if decoded_points:
+            filtered = _filter_places_by_route_distance(
+                places=places,
+                decoded_points=decoded_points,
+                max_distance_m=float(settings.SPOT_MAX_DISTANCE_M),
+                max_spots=5,
+            )
+            if len(filtered) < 3:
+                filtered = _filter_places_by_route_distance(
+                    places=merged,
+                    decoded_points=decoded_points,
+                    max_distance_m=float(settings.SPOT_MAX_DISTANCE_M_RELAXED),
+                    max_spots=5,
+                )
+            places = filtered
         if places:
             tools_used = _ensure_tool_used(tools_used, "places")
             status = "ok"
@@ -688,6 +738,7 @@ async def fetch_places(state: AgentState) -> Dict[str, Any]:
 
 
 async def simplify_polyline_to_waypoints(state: AgentState) -> Dict[str, Any]:
+    req = state["request"]
     decoded_points = state["decoded_points"]
     sample_points = state["sample_points"]
     places = state.get("places", [])
@@ -715,7 +766,8 @@ async def simplify_polyline_to_waypoints(state: AgentState) -> Dict[str, Any]:
         for p in places
         if p.get("lat") is not None and p.get("lng") is not None
     ]
-    combined = nav_waypoints + spot_points
+    # spotsを優先してnav_waypointsに採用する
+    combined = spot_points + nav_waypoints
     seen = set()
     deduped: List[LatLng] = []
     for wp in combined:
@@ -728,9 +780,21 @@ async def simplify_polyline_to_waypoints(state: AgentState) -> Dict[str, Any]:
     max_points = 10
     if len(deduped) > max_points:
         trimmed: List[LatLng] = []
+        # spotsを先に確保
+        for sp in spot_points:
+            if len(trimmed) >= max_points:
+                break
+            if sp in trimmed:
+                continue
+            trimmed.append(sp)
+        # ルートの始点・終点を優先的に入れる
         if len(nav_waypoints) >= 2:
-            trimmed.append(nav_waypoints[0])
-            trimmed.append(nav_waypoints[-1])
+            for candidate in (nav_waypoints[0], nav_waypoints[-1]):
+                if len(trimmed) >= max_points:
+                    break
+                if candidate in trimmed:
+                    continue
+                trimmed.append(candidate)
         for wp in deduped:
             if len(trimmed) >= max_points:
                 break
@@ -740,6 +804,14 @@ async def simplify_polyline_to_waypoints(state: AgentState) -> Dict[str, Any]:
         deduped = trimmed[:max_points]
 
     nav_waypoints = deduped
+    if req.round_trip and nav_waypoints:
+        first = nav_waypoints[0]
+        last = nav_waypoints[-1]
+        if _haversine_m(first, last) > 10.0:
+            if len(nav_waypoints) < max_points:
+                nav_waypoints.append(first)
+            else:
+                nav_waypoints[-1] = first
     return {"nav_waypoints": nav_waypoints, "simplify_meta": simplify_meta}
 
 
