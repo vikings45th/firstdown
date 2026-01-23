@@ -320,20 +320,20 @@ async def _collect_places_two_phase(
     seen_keys = set()
     hidden_keyword = places_client.pick_hidden_keyword(theme)
     classic_types = places_client.get_classic_place_types_for_theme(theme)
+    if settings.PLACES_SAMPLE_POINTS_MAX > 0:
+        sample_points = sample_points[: settings.PLACES_SAMPLE_POINTS_MAX]
     phases = [
         {
             "name": "hidden",
             "keyword": hidden_keyword,
             "included_types": None,
             "allow_unfiltered_fallback": False,
-            "allow_outdoor_no_hours": False,
         },
         {
             "name": "classic",
             "keyword": None,
             "included_types": classic_types,
             "allow_unfiltered_fallback": True,
-            "allow_outdoor_no_hours": True,
         },
     ]
 
@@ -362,7 +362,6 @@ async def _collect_places_two_phase(
                 included_types=phase["included_types"],
                 keyword=phase["keyword"],
                 allow_unfiltered_fallback=phase["allow_unfiltered_fallback"],
-                allow_outdoor_no_hours=phase["allow_outdoor_no_hours"],
             )
             logger.info(
                 "[Places] request_id=%s phase=%s found %d places at (%.6f, %.6f): %s",
@@ -546,8 +545,8 @@ async def compute_features(state: AgentState) -> Dict[str, Any]:
                 theme=req.theme,
                 sample_points=sample_points,
                 max_spots=5,
-                radius_m=800,
-                max_results=3,
+                radius_m=settings.PLACES_RADIUS_M,
+                max_results=settings.PLACES_MAX_RESULTS,
             )
             spot_type_diversity = _spot_type_diversity(merged_places)
             if decoded_points and merged_places:
@@ -744,8 +743,8 @@ async def fetch_places(state: AgentState) -> Dict[str, Any]:
             theme=req.theme,
             sample_points=sample_points,
             max_spots=5,
-            radius_m=800,
-            max_results=3,
+            radius_m=settings.PLACES_RADIUS_M,
+            max_results=settings.PLACES_MAX_RESULTS,
         )
         places = selected
         if decoded_points:

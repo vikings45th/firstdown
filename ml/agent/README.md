@@ -66,6 +66,9 @@ Agent APIは、ユーザーのリクエストに基づいて最適な散歩ル�
 | `VERTEX_TOP_P` | `0.95` | Vertex AIのtop_pパラメータ |
 | `VERTEX_TOP_K` | `40` | Vertex AIのtop_kパラメータ |
 | `VERTEX_FORBIDDEN_WORDS` | `""` | 禁止ワード（カンマ区切り） |
+| `PLACES_RADIUS_M` | `300` | Places APIの検索半径（m） |
+| `PLACES_MAX_RESULTS` | `2` | 1地点あたりの最大件数 |
+| `PLACES_SAMPLE_POINTS_MAX` | `1` | 検索地点数（サンプル点の上限） |
 | `BQ_DATASET` | `firstdown_mvp` | BigQueryデータセット名 |
 | `BQ_TABLE_REQUEST` | `route_request` | BigQueryリクエストテーブル名 |
 | `BQ_TABLE_CANDIDATE` | `route_candidate` | BigQuery候補テーブル名 |

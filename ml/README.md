@@ -108,6 +108,9 @@
 | `VERTEX_PROJECT` | Google Cloud Project ID | Agent APIのみ |
 | `VERTEX_LOCATION` | Vertex AI リージョン | Agent APIのみ |
 | `VERTEX_FORBIDDEN_WORDS` | 禁止ワード（カンマ区切り） | Agent APIのみ |
+| `PLACES_RADIUS_M` | Places APIの検索半径（m） | Agent APIのみ |
+| `PLACES_MAX_RESULTS` | 1地点あたりの最大件数 | Agent APIのみ |
+| `PLACES_SAMPLE_POINTS_MAX` | 検索地点数（サンプル点の上限） | Agent APIのみ |
 | `SPOT_MAX_DISTANCE_M` | ルートからの最大距離（m） | Agent APIのみ |
 | `SPOT_MAX_DISTANCE_M_RELAXED` | 緩和時の最大距離（m） | Agent APIのみ |
 | `SPOT_MAX_DISTANCE_M_FALLBACK` | 追加緩和時の最大距離（m） | Agent APIのみ |
