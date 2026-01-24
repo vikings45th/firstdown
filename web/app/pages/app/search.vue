@@ -56,17 +56,6 @@
   
   const searchParamsState = useSearchParams();
   const routeState = useCurrentRoute();
-  const appConfig = useAppConfig();
-
-  // 現在地を保存する変数
-  const currentLocation = ref<{lat: number, lng: number}>({
-    lat: 35.685175,
-    lng: 139.752799
-  });
-
-  // 地図関連
-  let mapInstance: any = null;
-  let startMarker: any = null;
 
   const fetchCurrentLocation = (): Promise<void> => {
     if (!navigator.geolocation) {
@@ -145,106 +134,6 @@
     }
   };
 
-  const initMap = () => {
-    const mapElement = document.getElementById("start-location-map");
-    if (!mapElement || !(window as any).google) {
-      return;
-    }
-
-    // 既にマップが初期化されている場合は削除
-    if (mapInstance) {
-      if (startMarker) {
-        startMarker.setMap(null);
-        startMarker = null;
-      }
-      mapInstance = null;
-    }
-
-    // 現在地の座標を取得
-    const center = {
-      lat: currentLocation.value.lat,
-      lng: currentLocation.value.lng
-    };
-
-    // 地図を初期化（ドラッグ可能にする）
-    mapInstance = new (window as any).google.maps.Map(mapElement, {
-      center,
-      zoom: 16,
-      disableDefaultUI: true,
-      draggable: true,
-      scrollwheel: true,
-      disableDoubleClickZoom: true,
-      keyboardShortcuts: false,
-      clickableIcons: false,
-    });
-
-    // 地図のサイズを再計算（flexboxで高さが確定した後に必要）
-    setTimeout(() => {
-      if (mapInstance) {
-        (window as any).google.maps.event.trigger(mapInstance, 'resize');
-      }
-    }, 300);
-
-    // ResizeObserverで要素のサイズ変更を監視
-    if (mapElement && mapInstance) {
-      const resizeObserver = new ResizeObserver(() => {
-        if (mapInstance) {
-          (window as any).google.maps.event.trigger(mapInstance, 'resize');
-        }
-      });
-      resizeObserver.observe(mapElement);
-      
-      // クリーンアップ用に保存
-      (mapElement as any).__resizeObserver = resizeObserver;
-    }
-
-    // 開始地点のマーカーを作成（ドラッグ可能）
-    const position = new (window as any).google.maps.LatLng(center.lat, center.lng);
-    
-    // セカンダリーカラーで現在地アイコンを作成
-    const secondaryColorName = appConfig.ui?.colors?.secondary || 'ember';
-      const secondaryColor = getComputedStyle(document.documentElement)
-        .getPropertyValue(`--color-${secondaryColorName}-600`)
-        .trim() || '#FB7C2D';
-    
-    // ピンアイコンSVG
-    const pinIconSvg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24">
-        <path fill="${secondaryColor}" d="M12 11c-1.33 0-4 .67-4 2v.16c.97 1.12 2.4 1.84 4 1.84s3.03-.72 4-1.84V13c0-1.33-2.67-2-4-2m0-1c1.1 0 2-.9 2-2s-.9-2-2-2s-2 .9-2 2s.9 2 2 2m0-8c4.2 0 8 3.22 8 8.2c0 3.32-2.67 7.25-8 11.8c-5.33-4.55-8-8.48-8-11.8C4 5.22 7.8 2 12 2"/>
-      </svg>
-    `;
-    
-    const pinIcon = {
-      url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(pinIconSvg),
-      scaledSize: new (window as any).google.maps.Size(40, 40),
-      anchor: new (window as any).google.maps.Point(20, 20),
-    };
-    
-    startMarker = new (window as any).google.maps.Marker({
-      position: position,
-      map: mapInstance,
-      title: '開始地点',
-      draggable: true, // マーカーをドラッグ可能にする
-      icon: pinIcon,
-    });
-
-    // マーカーがドラッグされたときに位置を更新
-    startMarker.addListener('dragend', (event: any) => {
-      const lat = event.latLng.lat();
-      const lng = event.latLng.lng();
-      currentLocation.value = { lat, lng };
-    });
-
-    // 地図がクリックされたときにもマーカーを移動
-    mapInstance.addListener('click', (event: any) => {
-      const lat = event.latLng.lat();
-      const lng = event.latLng.lng();
-      const position = new (window as any).google.maps.LatLng(lat, lng);
-      startMarker.setPosition(position);
-      currentLocation.value = { lat, lng };
-    });
-  };
-
   onMounted(async() => {
     // quicksearch=trueの場合は自動的に検索を実行
     if (quicksearch) {
@@ -268,41 +157,7 @@
         await fetchCurrentLocation();
       }
     }
-
-    // DOMが完全にレンダリングされた後に地図を初期化
-    await nextTick();
-    
-    // 地図を初期化（Google Maps APIの読み込みを待つ）
-    const checkGoogleMaps = setInterval(() => {
-      if ((window as any).google) {
-        clearInterval(checkGoogleMaps);
-        // さらに少し待ってから初期化（レイアウトが確定するまで）
-        setTimeout(() => {
-          initMap();
-        }, 200);
-      }
-    }, 100);
-
-    // タイムアウト（10秒後）
-    setTimeout(() => {
-      clearInterval(checkGoogleMaps);
-    }, 10000);
-  });
-
-  // コンポーネントがアンマウントされる時にマップを破棄
-  onBeforeUnmount(() => {
-    const mapElement = document.getElementById("start-location-map");
-    if (mapElement && (mapElement as any).__resizeObserver) {
-      (mapElement as any).__resizeObserver.disconnect();
-    }
-    if (startMarker) {
-      startMarker.setMap(null);
-      startMarker = null;
-    }
-    if (mapInstance) {
-      mapInstance = null;
-    }
-  });
+  })
 
 </script>
 <template>
@@ -345,26 +200,57 @@
           }"
         />
       </div>
-      <div class="overflow-x-auto pb-4 mr-2 px-2 scrollbar-hide">
-        <URadioGroup 
-          indicator="hidden"
-          orientation="horizontal"
-          v-model="motivation" 
-          :items="motivationItems" 
-          variant="card"
-          :ui="{
-            wrapper: 'shrink-0 min-w-[120px]', 
-          }"
-        />
+      <div class="text-right text-xs">
+        <p class="font-semibold text-primary-600">
+          {{ searchParams.distance_km }}km
+        </p>
+        <p class="text-gray-500">
+          約 {{ Math.round(searchParams.distance_km/0.06) }} 分
+        </p>
+        <p class="text-gray-400">
+          約 {{ searchParams.distance_km*1000 }} 歩
+        </p>
       </div>
-      <UButton
-        block
-        color="secondary"
-        label="散歩ルートを探す"
-        class="my-4 text-lg font-bold rounded-full"
-        @click="callApi"
-      />
     </div>
+    <USlider 
+      v-model="searchParams.distance_km" 
+      :min="0.5" 
+      :max="10" 
+      :step="0.5" 
+      :default-value="5" 
+      class="mb-2"
+    />
+    <div class="space-y-2 mb-2">
+      <p class="text-sm font-semibold text-gray-700 tracking-wide">どこからどこまで？</p>
+      <p class="text-xs text-gray-500">現在地をもとに開始地点と終了地点を指定します。</p>
+    </div>
+    <UButton
+        size="xs"
+        color="primary"
+        :loading="loadingLocation"
+        @click="fetchCurrentLocation"
+    >
+      現在地を取得
+    </UButton>
+    <!-- 開始地点・終了地点 -->
+    <UInput
+      v-model.number="searchParams.start_location.lat"
+      type="number"
+      step="0.000001"
+      placeholder="開始地点の緯度"
+    />
+    <UInput
+      v-model.number="searchParams.start_location.lng"
+      type="number"
+      step="0.000001"
+      placeholder="開始地点の経度"
+    />
+    <UButton 
+      color="secondary"
+      label="ルートを生成"
+      class="w-full mt-2"
+      @click="callApi"
+    />
   </div>
 
   <!-- 検索中のモーダル -->
