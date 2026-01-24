@@ -39,7 +39,7 @@
     value: 'heavy'
   }]);
   const motivation = ref("light")
-  // 検索条件の初期値を作成
+  // Stateではない検索条件の初期値を作成
   const searchParams = ref<ApiRequest>({
     request_id: "initialSearchParamsStateRequestId",
     theme: 'exercise',
