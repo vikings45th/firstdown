@@ -13,6 +13,7 @@
 
   const route = useRoute();
   const themeParam = route.query.theme as string | undefined;
+  const motivationParam = route.query.motivation as string | undefined;
   const quicksearch = route.query.quicksearch === 'true';
 
   const themeItems = ref([{
@@ -56,7 +57,6 @@
   
   const searchParamsState = useSearchParams();
   const routeState = useCurrentRoute();
-  const appConfig = useAppConfig();
 
   // 現在地を保存する変数
   const currentLocation = ref<{lat: number, lng: number}>({
@@ -282,6 +282,15 @@
     if (quicksearch) {
       loadingApi.value = true;
       searchParams.value.theme = themeParam && themeItems.value.some(item => item.value === themeParam) ? themeParam : searchParams.value.theme
+      motivation.value = motivationParam && motivationItems.value.some(item => item.value === motivationParam) ? motivationParam : motivation.value
+      // motivation.valueによる分岐
+      if (motivation.value === 'light') {
+        searchParams.value.distance_km = 1;
+      } else if (motivation.value === 'medium') {
+        searchParams.value.distance_km = 2;
+      } else if (motivation.value === 'heavy') {
+        searchParams.value.distance_km = 3;
+      }
 
       await fetchCurrentLocation();
       await callApi();

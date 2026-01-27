@@ -300,10 +300,6 @@
     }
   };
 
-  const handleResearch = async () => {
-    await navigateTo('/app/search');
-  };
-
   const handleRegenerate = async () => {
     if (!searchParamsState.value) {
       await navigateTo('/app/search');
@@ -422,7 +418,7 @@
       <!-- 見どころスポット -->
       <div class="flex gap-2 mt-2">
         <UButton block label="ルートを再検索" color="secondary" variant="outline" :loading="loadingRegenerate" @click="handleRegenerate" class="flex-1 bg-white" />
-        <UButton block label="検索条件を変更" color="secondary" variant="outline" @click="handleResearch" class="flex-1 bg-white" />
+        <UButton block label="検索条件を変更" color="secondary" variant="outline" to="/app/search" class="flex-1 bg-white" />
       </div>
     </div>
   </div>
