@@ -9,7 +9,7 @@ from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from langchain_core.exceptions import OutputParserException
 from langchain_google_vertexai import ChatVertexAI
 
-from app.schemas import DescriptionResponse, TitleResponse
+from app.schemas import DescriptionResponse, TitleResponse, TitleDescriptionResponse
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -246,3 +246,78 @@ async def generate_title(
             logger.exception("[Vertex LLM Title Error] err=%r", e)
 
     return _fallback_title(theme, distance_km, duration_min, spots)
+
+
+async def generate_title_and_description(
+    *,
+    theme: str,
+    distance_km: float,
+    duration_min: float,
+    spots: Optional[list] = None,
+) -> dict[str, str]:
+    temperature = float(getattr(settings, "VERTEX_TEMPERATURE", 0.3))
+    max_out = int(float(getattr(settings, "VERTEX_MAX_OUTPUT_TOKENS", 256)))
+    forbidden_words = _forbidden_words()
+
+    theme_desc = _theme_to_natural(theme)
+    names = _spot_names(spots)
+    spots_text = "、".join(names[:4]) if names else ""
+
+    attempts = [
+        {
+            "strict": False,
+            "title_min": 8,
+            "title_max": 20,
+            "desc_min": 80,
+            "desc_max": 120,
+            "temperature": temperature,
+            "max_out": max(max_out, 320),
+        },
+        {
+            "strict": True,
+            "title_min": 8,
+            "title_max": 18,
+            "desc_min": 90,
+            "desc_max": 120,
+            "temperature": min(temperature, 0.2),
+            "max_out": max(max_out, 320),
+        },
+    ]
+
+    for attempt in attempts:
+        prompt = _render_prompt(
+            "title_description.jinja",
+            strict=attempt["strict"],
+            title_min_chars=attempt["title_min"],
+            title_max_chars=attempt["title_max"],
+            desc_min_chars=attempt["desc_min"],
+            desc_max_chars=attempt["desc_max"],
+            theme_desc=theme_desc,
+            distance_km_str=f"{distance_km:.1f}km",
+            duration_min_str=f"{duration_min:.0f}分",
+            spots_text=spots_text,
+            forbidden_words=forbidden_words,
+        )
+        try:
+            result = await _invoke_structured(
+                prompt,
+                temperature=attempt["temperature"],
+                max_output_tokens=attempt["max_out"],
+                schema=TitleDescriptionResponse,
+            )
+            parsed = result if isinstance(result, TitleDescriptionResponse) else TitleDescriptionResponse.model_validate(result)
+            title = parsed.title
+            description = parsed.description
+            banned = _contains_forbidden(title, forbidden_words) or _contains_forbidden(description, forbidden_words)
+            if banned:
+                raise ValueError(f"forbidden word found: {banned}")
+            return {"title": title, "description": description}
+        except (OutputParserException, ValueError) as e:
+            logger.warning("[Vertex LLM Title+Summary Invalid] err=%r", e)
+        except Exception as e:
+            logger.exception("[Vertex LLM Title+Summary Error] err=%r", e)
+
+    return {
+        "title": _fallback_title(theme, distance_km, duration_min, spots),
+        "description": _fallback_summary(theme, distance_km, duration_min, spots),
+    }

@@ -108,6 +108,33 @@ def get_classic_place_types_for_theme(theme: Optional[str]) -> List[str]:
     return _get_classic_place_types_for_theme(theme)
 
 
+def _blocklist_names() -> List[str]:
+    raw = str(getattr(settings, "PLACES_NAME_BLOCKLIST", "") or "")
+    return [w.strip() for w in raw.split(",") if w.strip()]
+
+
+def _blocklist_types() -> List[str]:
+    raw = str(getattr(settings, "PLACES_TYPE_BLOCKLIST", "") or "")
+    return [w.strip() for w in raw.split(",") if w.strip()]
+
+
+def _normalize_name(name: str) -> str:
+    return name.replace(" ", "").replace("　", "").lower()
+
+
+def _is_blocked_place(name: Optional[str], primary_type: Optional[str]) -> bool:
+    if primary_type:
+        if primary_type in _blocklist_types():
+            return True
+    if not name:
+        return False
+    n = _normalize_name(name)
+    for w in _blocklist_names():
+        if _normalize_name(w) in n:
+            return True
+    return False
+
+
 async def search_spots(
     *,
     lat: float,
@@ -218,6 +245,8 @@ async def search_spots(
             location = p.get("location") or {}
             lat = location.get("latitude")
             lng = location.get("longitude")
+            if _is_blocked_place(name, primary):
+                continue
             if name and lat is not None and lng is not None:
                 out.append(
                     {
@@ -252,6 +281,8 @@ async def search_spots(
                     location = p.get("location") or {}
                     lat = location.get("latitude")
                     lng = location.get("longitude")
+                    if _is_blocked_place(name, primary):
+                        continue
                     if name and lat is not None and lng is not None:
                         out.append(
                             {

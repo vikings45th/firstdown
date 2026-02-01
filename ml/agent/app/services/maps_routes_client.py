@@ -122,6 +122,10 @@ def compute_route_dests(
     distance_km: float,
     round_trip: bool,
 ) -> List[Any]:
+    def _min_km_for_short_distance(target_km: float) -> float:
+        # 1km前後のときは下限を小さくして距離誤差を抑える
+        return 0.2 if target_km <= 1.5 else 0.5
+
     # 候補を多様化するために方位角を作成（360°を6等分）
     # 毎回少し回転・シャッフルして同条件でも変化させる
     base_headings = [0, 60, 120, 180, -120, -60]
@@ -147,7 +151,7 @@ def compute_route_dests(
 
     if not round_trip and end_lat_f is not None and end_lng_f is not None:
         if direct_km is not None and direct_km < distance_km:
-            detour_km = max((distance_km - direct_km) / 2.0, 0.5)
+            detour_km = max((distance_km - direct_km) / 2.0, _min_km_for_short_distance(distance_km))
             mid_lat = (start_lat + end_lat_f) / 2.0
             mid_lng = (start_lng + end_lng_f) / 2.0
             dests = [
@@ -163,8 +167,9 @@ def compute_route_dests(
     else:
         if round_trip:
             # 往復ルート: 形状バリエーションを増やす
-            waypoint_distance_km = max(distance_km / 4.0, 0.5)
-            radius_km = max(distance_km / (2.0 * math.pi), 0.35)
+            min_km = _min_km_for_short_distance(distance_km)
+            waypoint_distance_km = max(distance_km / 4.0, min_km)
+            radius_km = max(distance_km / (2.0 * math.pi), min_km * 0.9)
             max_candidates = 6
             dests = []
             seen = set()
@@ -230,7 +235,7 @@ def compute_route_dests(
                     if len(dests) >= max_candidates:
                         break
         else:
-            waypoint_distance_km = max(distance_km, 0.5)
+            waypoint_distance_km = max(distance_km, _min_km_for_short_distance(distance_km))
             dests = [
                 _offset_latlng(
                     start_lat,

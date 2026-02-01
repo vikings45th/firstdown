@@ -31,7 +31,14 @@ def _calculate_score(features: Dict[str, Any]) -> tuple[float, Dict[str, float]]
     """
     # 1. 距離乖離ペナルティ（距離誤差が小さいほど良い）
     distance_error_ratio = float(features.get("distance_error_ratio", 0.0))  # 距離誤差比率
-    distance_penalty = -distance_error_ratio * 0.5  # 誤差が大きいほど減点
+    # 10%以内は良好、10-20%は緩やかに減点、20%以上は大幅に減点
+    if distance_error_ratio <= 0.1:
+        distance_penalty = 0.0
+    elif distance_error_ratio <= 0.2:
+        distance_penalty = -(distance_error_ratio - 0.1) * 1.0
+    else:
+        distance_penalty = -0.1 - (distance_error_ratio - 0.2) * 2.0
+        distance_penalty = max(distance_penalty, -0.6)
     
     # 2. Loop closure ボーナス（往復ルート適合度）
     round_trip_req = features.get("round_trip_req", 0)  # 往復ルート要求フラグ
@@ -53,9 +60,15 @@ def _calculate_score(features: Dict[str, Any]) -> tuple[float, Dict[str, float]]
     poi_density = float(features.get("poi_density", 0.0))  # POI密度
     poi_bonus = park_poi_ratio * 0.15 + min(poi_density, 1.0) * 0.1  # 上限あり（poi_densityは1.0でクランプ）
 
-    # 3.5 スポットタイプ多様性ボーナス（単調さ抑止）
+    # 3.5 スポットタイプ多様性（単調さ抑止）
     spot_type_diversity = float(features.get("spot_type_diversity", 0.0))  # 0.0-1.0
-    diversity_bonus = min(max(spot_type_diversity, 0.0), 1.0) * 0.12
+    diversity = min(max(spot_type_diversity, 0.0), 1.0)
+    # 同じタイプに偏るほど減点、種類が分散するほど加点
+    if diversity < 0.4:
+        diversity_bonus = -(0.4 - diversity) * 0.3  # 0.0で-0.12
+    else:
+        diversity_bonus = (diversity - 0.4) * 0.2  # 1.0で+0.12
+    diversity_bonus = max(-0.12, min(0.12, diversity_bonus))
 
     # 3.6 寄り道超過ペナルティ（許容距離を超えた分を減点）
     detour_over_ratio = float(features.get("detour_over_ratio", 0.0))  # 0.0-∞
