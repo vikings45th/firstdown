@@ -30,12 +30,21 @@ class Settings(BaseSettings):
     PLACES_RADIUS_M: int = 300  # 検索半径（m）
     PLACES_MAX_RESULTS: int = 2  # 1地点あたりの最大件数
     PLACES_SAMPLE_POINTS_MAX: int = 1  # 検索地点数（サンプル点の上限）
+    PLACES_NAME_BLOCKLIST: str = (
+        "セブン-イレブン,ファミリーマート,ローソン,ミニストップ,"
+        "マクドナルド,モスバーガー,バーガーキング,ケンタッキー,"
+        "サブウェイ,ミスタードーナツ,スターバックス,ドトール,タリーズ,コメダ珈琲,"
+        "すき家,吉野家,松屋,なか卯,丸亀製麺,はなまるうどん,日高屋,サイゼリヤ,ガスト"
+    )
+    PLACES_TYPE_BLOCKLIST: str = "convenience_store,fast_food_restaurant"
 
     # ルート生成（逐次生成/早期終了）
     MAX_ROUTES: int = 5  # 最大生成本数
     MIN_ROUTES: int = 2  # 最低生成本数
     SCORE_THRESHOLD: float = 0.6  # 早期終了の閾値（暫定）
     CONCURRENCY: int = 2  # 外部APIの並列数
+    ROUTE_DISTANCE_ERROR_RATIO_MAX: float = 0.3  # 目標距離の許容誤差比率
+    ROUTE_DISTANCE_RETRY_MAX: int = 1  # 距離フィルタ後の再生成回数
 
     # BigQuery
     BQ_DATASET: str = "firstdown_mvp"  # BigQueryデータセット名

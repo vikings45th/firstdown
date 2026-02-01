@@ -143,7 +143,13 @@ Ranker APIは、Agent APIから送信されたルート候補を評価し、ス�
 目標距離との誤差が小さいほど良い。
 
 ```python
-distance_penalty = -distance_error_ratio * 0.5
+if distance_error_ratio <= 0.1:
+    distance_penalty = 0.0
+elif distance_error_ratio <= 0.2:
+    distance_penalty = -(distance_error_ratio - 0.1) * 1.0
+else:
+    distance_penalty = -0.1 - (distance_error_ratio - 0.2) * 2.0
+    distance_penalty = max(distance_penalty, -0.6)
 ```
 
 - `distance_error_ratio`: 目標距離との誤差比率（小さいほど良い）
@@ -200,12 +206,17 @@ if theme_exercise:
   - 5-10m/km: 軽い坂道（+0.1）
   - 50m/km以上: 急な坂道（+0.1）
 
-#### 5. スポット多様性ボーナス
+#### 5. スポット多様性（単調さ抑止）
 
 スポットのカテゴリが分散しているほど良い。
 
 ```python
-diversity_bonus = min(max(spot_type_diversity, 0.0), 1.0) * 0.12
+diversity = min(max(spot_type_diversity, 0.0), 1.0)
+if diversity < 0.4:
+    diversity_bonus = -(0.4 - diversity) * 0.3  # 0.0で-0.12
+else:
+    diversity_bonus = (diversity - 0.4) * 0.2  # 1.0で+0.12
+diversity_bonus = max(-0.12, min(0.12, diversity_bonus))
 ```
 
 - `spot_type_diversity`: スポットタイプ多様性（0.0-1.0）
