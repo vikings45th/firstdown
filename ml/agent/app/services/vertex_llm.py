@@ -104,39 +104,39 @@ def _spot_names(spots: Optional[list]) -> list[str]:
 def _fallback_summary(theme: str, distance_km: float, duration_min: float, spots: Optional[list]) -> str:
     theme_summaries = {
         "think": [
-            f"静かなリズムで歩ける約{distance_km:.1f}kmのルートで、頭がすっと整う心地よいひとときを楽しめます。",
-            f"約{distance_km:.1f}kmの落ち着いた道のりを歩きながら、思考が冴える爽やかな時間を味わえます。",
-            f"約{distance_km:.1f}kmの静かな散歩道で、ゆっくりと自分のペースに戻れる時間が広がります。",
+            f"静かなリズムで歩ける約{distance_km:.1f}kmのルートです。頭がすっと整う、優しいひとときを過ごしてみませんか。",
+            f"約{distance_km:.1f}kmの落ち着いた道のりです。ゆっくり歩きながら、少しずつ心が軽くなっていくかもしれません。",
+            f"約{distance_km:.1f}kmの静かな散歩道です。自分のペースで、無理せず歩いてみてください。",
         ],
         "exercise": [
-            f"アップダウンも楽しめる約{distance_km:.1f}kmのルートで、気分が高まる爽快ウォークに出かけましょう。",
-            f"約{distance_km:.1f}kmのアクティブな道のりで、体が目覚めるワクワク散歩が始まります。",
-            f"心拍が上がる約{distance_km:.1f}kmのルートで、汗と一緒に気分もリフレッシュしましょう。",
+            f"アップダウンもある約{distance_km:.1f}kmのルートです。ちょっと勇気を出して、体を動かしてみませんか。",
+            f"約{distance_km:.1f}kmの道のりです。少し体を動かすことで、気持ちも少しずつ前を向けるかもしれません。",
+            f"約{distance_km:.1f}kmのルートです。無理せず、自分のペースで歩いてみてください。",
         ],
         "refresh": [
-            f"街の活気を感じながら歩ける約{distance_km:.1f}kmのルートで、気分が弾むリフレッシュを味わえます。",
-            f"約{distance_km:.1f}kmの街歩きで、景色の変化を楽しむ軽やかな気分転換に出かけられます。",
-            f"にぎわいを感じる約{distance_km:.1f}kmの道のりで、心がほどける散歩時間を楽しめます。",
+            f"街の景色を感じながら歩ける約{distance_km:.1f}kmのルートです。外に出てみることで、少し気持ちが変わるかもしれません。",
+            f"約{distance_km:.1f}kmの街歩きです。景色の変化を感じながら、ゆっくり歩いてみませんか。",
+            f"にぎわいを感じる約{distance_km:.1f}kmの道のりです。心が少しずつ軽くなる時間を過ごしてみてください。",
         ],
         "nature": [
-            f"緑に包まれながら歩ける約{distance_km:.1f}kmのルートで、心がほどける自然時間を満喫できます。",
-            f"約{distance_km:.1f}kmの自然を感じる散歩道で、深呼吸したくなる景色が続きます。",
-            f"木漏れ日を感じる約{distance_km:.1f}kmのルートで、癒やしの散策が待っています。",
+            f"緑に包まれながら歩ける約{distance_km:.1f}kmのルートです。自然の中で、ゆっくりと心を休めてみませんか。",
+            f"約{distance_km:.1f}kmの自然を感じる散歩道です。深呼吸しながら、優しい景色に包まれてみてください。",
+            f"木漏れ日を感じる約{distance_km:.1f}kmのルートです。癒やしの時間を、無理せず過ごしてみてください。",
         ],
     }
     options = theme_summaries.get(
         theme,
-        [f"約{distance_km:.1f}kmを{duration_min:.0f}分で歩ける、歩き出したくなる散歩コースです。"],
+        [f"約{distance_km:.1f}kmを{duration_min:.0f}分で歩ける散歩コースです。少しずつ、歩いてみませんか。"],
     )
     return random.choice(options)
 
 
 def _fallback_title(theme: str, distance_km: float, duration_min: float, spots: Optional[list]) -> str:
     theme_titles = {
-        "think": ["静けさの川沿い", "ひと息つける小道", "思索の並木道"],
-        "exercise": ["アップダウン燃焼", "坂道チャージ", "アクティブ散歩"],
-        "refresh": ["街なかリフレッシュ", "きらめき街歩き", "気分転換の小径"],
-        "nature": ["木漏れ日の森歩き", "緑風のさんぽ道", "自然に浸る散策"],
+        "think": ["静けさの川沿い", "ひと息つける小道", "優しい並木道"],
+        "exercise": ["ゆっくり歩ける坂道", "無理しない散歩道", "自分のペースで歩く道"],
+        "refresh": ["街なか散歩", "優しい街歩き", "気分転換の小径"],
+        "nature": ["木漏れ日の森歩き", "緑に包まれる道", "自然に寄り添う散策"],
     }
     base = random.choice(theme_titles.get(theme, ["散歩"]))
     return f"{base}コース"
@@ -148,10 +148,10 @@ def fallback_title(theme: str, distance_km: float, duration_min: float, spots: O
 
 def _theme_to_natural(theme: str) -> str:
     theme_map = {
-        "exercise": "体を使って整えるモード（身体刺激でリセット）",
-        "think": "考えなくていい道モード（思考停止のための静かな道）",
-        "refresh": "ちょっとだけ気分転換モード（人混みより景色変化）",
-        "nature": "呼吸を整えるモード（自然＝回復資源）",
+        "think": "考えなくていい道モード。今日は、頭を休ませる道を用意しました。一本道が中心のコースです。考えなくてOK。歩くだけで大丈夫です。",
+        "nature": "呼吸を整えるモード。呼吸が少し楽になる道です。空や木が見える場所を通ります。何かしなくていいので、ただ外の空気に触れてみませんか。",
+        "refresh": "ちょっと気分転換モード。景色を少しだけ変える散歩です。見るだけの場所がいくつかあります。寄らなくて大丈夫。通り過ぎるだけでOKです。",
+        "exercise": "体を使って整えるモード。少し体を動かすと、気持ちが変わることがあります。ゆるい坂があるコースです。途中でやめてもOK。行けたところまでで十分です。",
     }
     return theme_map.get(theme, theme)
 
