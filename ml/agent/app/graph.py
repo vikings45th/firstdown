@@ -500,8 +500,34 @@ async def generate_candidates_routes(state: AgentState) -> Dict[str, Any]:
                 )
                 if not route:
                     continue
+                
+                # ルートの妥当性チェック
+                route_distance_km = float(route.get("distance_km") or 0.0)
+                route_polyline = route.get("polyline", "").strip()
+                
+                # 距離が0以下、または極端に小さい値（0.01km = 10m以下）の場合は無効
+                if route_distance_km <= 0.01:
+                    filtered_out += 1
+                    logger.warning(
+                        "[Routes Invalid] request_id=%s idx=%d distance too small: %.3fkm",
+                        req.request_id,
+                        idx,
+                        route_distance_km,
+                    )
+                    continue
+                
+                # polylineが空、または無効な値の場合は無効
+                if not route_polyline or route_polyline in ("", "xxxx", "~oia@"):
+                    filtered_out += 1
+                    logger.warning(
+                        "[Routes Invalid] request_id=%s idx=%d invalid polyline: %s",
+                        req.request_id,
+                        idx,
+                        route_polyline[:20] if route_polyline else "empty",
+                    )
+                    continue
+                
                 if target_distance_km > 0 and max_error_ratio >= 0:
-                    route_distance_km = float(route.get("distance_km") or 0.0)
                     error_base_km = original_target_km if original_target_km > 0 else target_distance_km
                     distance_error_ratio = abs(route_distance_km - error_base_km) / error_base_km
                     if closest_error_ratio is None or distance_error_ratio < closest_error_ratio:
@@ -835,10 +861,103 @@ async def select_best_route(state: AgentState) -> Dict[str, Any]:
     req = state["request"]
     candidates = state["candidates"]
     score_map = state["score_map"]
+    fallback_reasons = list(state.get("fallback_reasons", []))
     t_start = time.perf_counter()
     best_route = fallback.choose_best_route(candidates, score_map, req.theme)
     if best_route is None:
         raise HTTPException(status_code=422, detail="No viable route found")
+
+    # 選択されたルートの妥当性を最終チェック
+    route_distance_km = float(best_route.get("distance_km") or 0.0)
+    route_polyline = best_route.get("polyline", "").strip()
+    
+    # 距離が0以下、または極端に小さい値（0.01km = 10m以下）の場合は無効
+    if route_distance_km <= 0.01:
+        logger.error(
+            "[Select Best Route Invalid] request_id=%s route_id=%s distance too small: %.3fkm. Using fallback.",
+            req.request_id,
+            best_route.get("route_id"),
+            route_distance_km,
+        )
+        # フォールバックルートを生成
+        start_lat = float(req.start_location.lat)
+        start_lng = float(req.start_location.lng)
+        effective_end_location = None if req.round_trip else req.end_location
+        
+        if effective_end_location is not None:
+            fallback_points = [
+                (start_lat, start_lng),
+                (float(effective_end_location.lat), float(effective_end_location.lng)),
+            ]
+        else:
+            fallback_points = [
+                (start_lat, start_lng),
+                (start_lat + 0.0001, start_lng + 0.0001),
+            ]
+        
+        safe_polyline = ""
+        try:
+            safe_polyline = polyline_lib.encode(fallback_points)
+        except Exception:
+            safe_polyline = "~oia@"
+        
+        if not safe_polyline or safe_polyline.strip() == "":
+            safe_polyline = "~oia@"
+        
+        best_route = {
+            "route_id": "fallback_dummy",
+            "polyline": safe_polyline,
+            "distance_km": float(req.distance_km),
+            "duration_min": 32.0,
+            "theme": req.theme,
+            "is_fallback": True,
+        }
+        if "invalid_route_detected" not in fallback_reasons:
+            fallback_reasons.append("invalid_route_detected")
+    
+    # polylineが空、または無効な値の場合は無効
+    elif not route_polyline or route_polyline in ("", "xxxx", "~oia@"):
+        logger.error(
+            "[Select Best Route Invalid] request_id=%s route_id=%s invalid polyline: %s. Using fallback.",
+            req.request_id,
+            best_route.get("route_id"),
+            route_polyline[:20] if route_polyline else "empty",
+        )
+        # フォールバックルートを生成
+        start_lat = float(req.start_location.lat)
+        start_lng = float(req.start_location.lng)
+        effective_end_location = None if req.round_trip else req.end_location
+        
+        if effective_end_location is not None:
+            fallback_points = [
+                (start_lat, start_lng),
+                (float(effective_end_location.lat), float(effective_end_location.lng)),
+            ]
+        else:
+            fallback_points = [
+                (start_lat, start_lng),
+                (start_lat + 0.0001, start_lng + 0.0001),
+            ]
+        
+        safe_polyline = ""
+        try:
+            safe_polyline = polyline_lib.encode(fallback_points)
+        except Exception:
+            safe_polyline = "~oia@"
+        
+        if not safe_polyline or safe_polyline.strip() == "":
+            safe_polyline = "~oia@"
+        
+        best_route = {
+            "route_id": "fallback_dummy",
+            "polyline": safe_polyline,
+            "distance_km": float(req.distance_km),
+            "duration_min": 32.0,
+            "theme": req.theme,
+            "is_fallback": True,
+        }
+        if "invalid_route_detected" not in fallback_reasons:
+            fallback_reasons.append("invalid_route_detected")
 
     shown_rank_map: Dict[str, int] = {}
     if score_map:
@@ -855,6 +974,7 @@ async def select_best_route(state: AgentState) -> Dict[str, Any]:
         "best_route": best_route,
         "best_score": best_score,
         "shown_rank_map": shown_rank_map,
+        "fallback_reasons": fallback_reasons,
         "latency_ms": _merge_latency(state, "select_best_route", elapsed_ms),
     }
 
@@ -1004,9 +1124,9 @@ async def parallel_postprocess(state: AgentState) -> Dict[str, Any]:
     if isinstance(result_map.get("text"), Exception):
         logger.error("[Text Parallel Error] request_id=%s err=%r", req.request_id, result_map["text"])
         template_candidates = [
-            "今すぐ歩き出したくなる散歩ルートです",
-            "気分が弾む散歩に出かけたくなるルートです",
-            "景色の変化を楽しめる、わくわくする散歩ルートです",
+            "少しずつ、歩いてみませんか。優しい散歩ルートです。",
+            "無理せず、自分のペースで歩ける散歩ルートです。",
+            "外に出てみることで、少し気持ちが変わるかもしれません。",
         ]
         text_result = {
             "description": random.choice(template_candidates),
@@ -1145,9 +1265,9 @@ async def generate_description_vertex(state: AgentState) -> Dict[str, Any]:
     spots_names = [s.name for s in spots] if spots else []
     spots_text = f"（見どころ: {', '.join(spots_names)}）" if spots_names else ""
     template_candidates = [
-        f"今すぐ歩き出したくなる散歩ルートです{spots_text}",
-        f"気分が弾む散歩に出かけたくなるルートです{spots_text}",
-        f"景色の変化を楽しめる、わくわくする散歩ルートです{spots_text}",
+        f"少しずつ、歩いてみませんか。優しい散歩ルートです{spots_text}",
+        f"無理せず、自分のペースで歩ける散歩ルートです{spots_text}",
+        f"外に出てみることで、少し気持ちが変わるかもしれません{spots_text}",
     ]
     description = random.choice(template_candidates)
     status = "pending"
@@ -1203,9 +1323,9 @@ async def generate_title_description_vertex(state: AgentState) -> Dict[str, Any]
     spots_names = [s.name for s in spots] if spots else []
     spots_text = f"（見どころ: {', '.join(spots_names)}）" if spots_names else ""
     template_candidates = [
-        f"今すぐ歩き出したくなる散歩ルートです{spots_text}",
-        f"気分が弾む散歩に出かけたくなるルートです{spots_text}",
-        f"景色の変化を楽しめる、わくわくする散歩ルートです{spots_text}",
+        f"少しずつ、歩いてみませんか。優しい散歩ルートです{spots_text}",
+        f"無理せず、自分のペースで歩ける散歩ルートです{spots_text}",
+        f"外に出てみることで、少し気持ちが変わるかもしれません{spots_text}",
     ]
     description = random.choice(template_candidates)
     title = vertex_llm.fallback_title(
@@ -1394,6 +1514,11 @@ async def build_fallback_details(state: AgentState) -> Dict[str, Any]:
             reason="vertex_llm_failed",
             description="ルート紹介文の生成に失敗しました",
             impact="テンプレートベースの紹介文が使用されています。ルート自体は正常に生成されています。",
+        ),
+        "invalid_route_detected": FallbackDetail(
+            reason="invalid_route_detected",
+            description="生成されたルートが無効でした",
+            impact="簡易ルートが生成されました。距離は目標に合わせていますが、実際の道順とは異なる場合があります。",
         ),
     }
     fallback_details = [
