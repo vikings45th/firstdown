@@ -117,7 +117,7 @@ Ranker APIは、Agent APIから送信されたルート候補を評価し、ス�
 - `failed_route_ids`: スコアリング失敗したルートIDのリスト
 - `breakdown`: スコア内訳（デバッグ用、各要素の寄与度）
   - `rule_score`: ルールスコア
-  - `model_score`: シャドウモデルスコア（失敗時はnull）
+- `model_score`: モデルスコア（失敗時はnull）
 
 **エラー:**
 - `422 Unprocessable Entity`: すべてのルートのスコアリングに失敗した場合
@@ -256,7 +256,7 @@ score = max(0.0, min(1.0, score))  # 0.0-1.0の範囲にクリップ
 - `has_stairs`: 階段の有無（1 or 0）
 - `elevation_density`: 標高差密度（m/km）
 
-**注意:** 将来的にVertex AIを使った機械学習モデルに置き換える予定です。
+**注意:** 現在はVertex AI Endpointのモデルスコアを優先し、ルールはシャドーで残します。
 
 ## 実装詳細
 
@@ -359,6 +359,29 @@ curl -X POST http://localhost:8080/rank \
 
 ## 学習とモデル配置
 
+### 学習データの作成
+
+学習データはBigQuery上のフィードバックと候補テーブルから作成します。
+
+- **フィードバック収集**: Agent API の `POST /route/feedback` が `route_feedback` に保存
+- **候補特徴量**: `route_candidate` に生成時の特徴量が保存
+- **学習ビュー**: `ml/agent/bq/training_view.sql` で結合・整形
+
+`training_view` の主なルール:
+
+- `rating IN (4, 5)` の高評価のみを正例として採用
+- 低評価は現状ラベルに使わず、**候補内の一部を弱い負例としてサンプリング**
+- 2/1以降のデータに限定（`event_ts >= TIMESTAMP '2026-02-01'`）
+
+これにより、ノイズの少ないラベルで**回帰ターゲット（rating）**を学習します。
+
+### モデル概要
+
+- **モデル**: XGBoost 回帰（`reg:pseudohubererror`）
+- **入力**: ルート特徴量（`feature_columns.json` に定義）
+- **出力**: 0-10スケールのスコア（実データの rating に合わせた回帰値）
+- **学習スクリプト**: `ml/ranker/training/train_xgb.py`
+
 ### 学習（BigQueryから取得）
 
 ```bash
@@ -393,6 +416,14 @@ Cloud Run では `models/` をイメージに同梱するか、ボリューム�
 ### Vertex AI Online Prediction（カスタムコンテナ）
 
 Vertex AI Endpointを使用した推論に切替える手順です。
+
+#### 実装概要
+
+- **推論コンテナ**: `ml/vertex/predictor`（FastAPI）
+- **GCSから成果物取得**: `MODEL_GCS_URI` / `FEATURES_GCS_URI` / `METADATA_GCS_URI`
+- **推論I/O**:
+  - 入力: `{"instances":[{feature:value, ...}]}`
+  - 出力: `{"predictions":[score, ...]}`
 
 #### 前提条件
 

@@ -23,7 +23,7 @@ firstdownは、ユーザーの好みに応じて最適な散歩ルートを生�
 - **テーマ別ルート生成**: 4つのテーマ（exercise, think, refresh, nature）に対応
 - **AIによる紹介文・タイトル生成**: Vertex AI + 構造化出力で安定した文面を生成
 - **スポット検索**: 二段階検索 + 営業時間フィルタ + ルート近傍フィルタ
-- **ルート最適化**: 機械学習によるルート品質評価とランキング
+- **ルート最適化**: 機械学習によるルート品質評価とランキング（Vertex AI Endpoint推論）
 - **ルート形状の多様化**: 直線/円/蛇行など複数形状の候補を生成
 - **フォールバック機能**: 外部API障害時も簡易ルートを提供
 
@@ -53,6 +53,7 @@ firstdownは、ユーザーの好みに応じて最適な散歩ルートを生�
        ├──► Maps Routes API ──► ルート候補生成
        ├──► Places API ──────► スポット検索
        ├──► Ranker API ──────► ルート評価
+       │                         └──► Vertex AI Endpoint（ランキング用推論）
        ├──► Vertex AI ───────► 紹介文・タイトル生成
        └──► BigQuery ────────► ログ・分析
 ```
@@ -89,11 +90,12 @@ firstdown/
 │   │   ├── requirements.txt
 │   │   ├── README.md
 │   │   └── test_generate_api.sh  # APIテストスクリプト
-│   └── ranker/             # ルート評価API
-│       ├── app/
-│       ├── Dockerfile
-│       ├── requirements.txt
-│       └── README.md
+│   ├── ranker/             # ルート評価API
+│   │   ├── app/
+│   │   ├── Dockerfile
+│   │   ├── requirements.txt
+│   │   └── README.md
+│   └── vertex/             # Vertex AI推論コンテナ（Ranker用）
 └── web/                    # フロントエンド
     ├── app/                # Nuxt.jsアプリケーション
     ├── server/             # サーバーサイドAPI
