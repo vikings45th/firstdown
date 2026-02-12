@@ -5,12 +5,18 @@ type ChatMessage = {
   parts: { type: string; text: string }[];
 };
 
+interface SuggestedRoute {
+  message: string;
+  theme: string;
+  distance_km: number;
+}
+
 const messages = ref<ChatMessage[]>([]);
-const suggestedRoute = {
+const suggestedRoute = ref<SuggestedRoute>({
   message: "頭を休ませる30分の散歩に出かける？",
   theme: "think",
-  distanve_km: 2,
-};
+  distance_km: 2,
+});
 const features = ref([
   {
     title: "どこを歩くか考えなくていい",
@@ -41,23 +47,44 @@ const chatButtonLabels = ref([
 ]);
 
 const firstSuggest = async () => {
-  const { text } = await $fetch<{ text: string }>("/api/gemini", {
+  messages.value = [];
+  const route = await $fetch<SuggestedRoute>("/api/gemini", {
     method: "POST",
     body: {
-      contents: "Explain how AI works in a few words",
       model: "gemini-2.5-flash",
     },
   });
+
+  suggestedRoute.value = route;
+
   messages.value.push({
     id: "6045235a-a435-46b8-989d-2df38ca2eb47",
     role: "assistant",
     parts: [
       {
         type: "text",
-        text: text,
+        text: route.message,
       },
     ],
   });
+};
+
+const handleButtonClick = (label: string) => {
+  if (label === "これで行く") {
+    navigateTo(`/app/search?theme=${suggestedRoute.value.theme}&distance_km=${suggestedRoute.value.distance_km}&quicksearch=true`);
+  } else if (label === "もうちょっと長く") {
+    // 距離を少し増やす処理（最大3kmまで）
+    if (suggestedRoute.value.distance_km < 3) {
+      suggestedRoute.value.distance_km = Math.min(suggestedRoute.value.distance_km + 0.5, 3);
+      firstSuggest();
+    }
+  } else if (label === "もうちょっと短く") {
+    // 距離を少し減らす処理（最小1kmまで）
+    if (suggestedRoute.value.distance_km > 1) {
+      suggestedRoute.value.distance_km = Math.max(suggestedRoute.value.distance_km - 0.5, 1);
+      firstSuggest();
+    }
+  }
 };
 
 onMounted(async () => {
@@ -111,6 +138,7 @@ onMounted(async () => {
         :label="label"
         color="neutral"
         variant="soft"
+        @click="handleButtonClick(label)"
       />
     </div>
   </UPageSection>
