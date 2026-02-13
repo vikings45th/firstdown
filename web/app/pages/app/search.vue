@@ -381,7 +381,7 @@ onBeforeUnmount(() => {
           :step="0.5"
           v-model="searchParams.distance_km"
         />
-        <div class="flex justify-between text-xs text-gray-500 -mt-2 px-0.5">
+        <div class="flex justify-between text-xs text-gray-500 mt-2 px-0.5">
           <span>15分</span>
           <span>30分</span>
           <span>45分</span>
@@ -391,7 +391,7 @@ onBeforeUnmount(() => {
         block
         color="secondary"
         label="散歩ルートを探す"
-        class="my-4 text-lg font-bold rounded-full"
+        class="my-4 text-lg font-bold rounded-full px-4"
         @click="callApi"
       />
     </div>
