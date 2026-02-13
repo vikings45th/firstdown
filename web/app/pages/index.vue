@@ -200,13 +200,13 @@ watch(isModalOpen, (newValue) => {
     icon="mdi:walk"
     color="secondary"
     size="xl"
-    class="fixed bottom-6 right-6 rounded-full shadow-lg z-50 p-4"
+    class="fixed top-[calc(100vh-1.5rem)] left-[calc(100vw-1.5rem)] rounded-full shadow-lg z-50 p-4 -translate-y-full -translate-x-full"
     @click="isModalOpen = true"
   />
   <!-- モーダル -->
   <div
     v-if="isModalOpen"
-    class="fixed bottom-6 right-6 w-[75vw] h-[50vh] p-4 shadow-lg border rounded-lg z-100 flex flex-col bg-neutral-50 dark:bg-neutral-600"
+    class="fixed top-[calc(100vh-1.5rem)] left-[calc(100vw-1.5rem)] w-[75vw] h-[66vh] p-4 shadow-lg border rounded-lg z-100 flex flex-col bg-neutral-50 dark:bg-neutral-600 -translate-y-full -translate-x-full"
   >
     <div class="flex justify-end flex-shrink-0 mb-2">
       <UButton
@@ -221,6 +221,7 @@ watch(isModalOpen, (newValue) => {
     <div class="flex-1 overflow-y-auto min-h-0">
       <UChatPalette>
         <UChatMessages
+          should-auto-scroll
           :status="geminiStatus"
           :messages="messages"
           :assistant="{

@@ -392,7 +392,7 @@ onBeforeUnmount(() => {
       ></gmp-map>
     </div>
 
-    <UCard class="absolute bottom-4 z-10 mx-2">
+    <UCard class="absolute top-[100%] z-10 mx-2 -translate-y-[calc(100%+1rem)]">
       <template #header>
         <h1 class="text-xl font-bold mb-2">{{ routeState.title }}</h1>
         <p class="text-sm mb-2">
