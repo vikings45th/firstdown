@@ -41,3 +41,6 @@ docker run -p 3000:3000 firstdown-web
 本番の GCP リソース（Cloud Run 等）の定義は [infra/README.md](../infra/README.md) を参照してください。
 
 
+## 関連
+本番の GCP リソース（Cloud Run 等）の定義は [infra/README.md](../infra/README.md) を参照してください。
+
