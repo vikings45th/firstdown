@@ -120,8 +120,6 @@ const initMap = async () => {
     });
   }
 
-  const infoWindow = new InfoWindow();
-
   // スタート地点のマーカーを追加
   if (coordinates.length > 0 && coordinates[0]) {
     const startPosition = { lat: coordinates[0].lat, lng: coordinates[0].lng };
@@ -143,6 +141,7 @@ const initMap = async () => {
     const startMarker = new AdvancedMarkerElement({
       position: startPosition,
       title: "スタート地点",
+      zIndex: 10,
     });
     // Append the pin to the marker.
     startMarker.append(startPin);
@@ -161,17 +160,13 @@ const initMap = async () => {
 
   // スポットのマーカーを追加
   if (routeState.value.spots && routeState.value.spots.length > 0) {
-    routeState.value.spots.forEach((spot, index) => {
+    routeState.value.spots.forEach((spot) => {
       if (spot.lat !== undefined && spot.lng !== undefined) {
         const position = { lat: spot.lat, lng: spot.lng };
 
-        // ピンアイコンSVGをHTML要素として作成
-        const pinElement = new PinElement({
-          background: "#43A047",
-          borderColor: "#FFFFFF",
-          glyphText: `${index + 1}`,
-          glyphColor: "white",
-        });
+        const nameTag = document.createElement("div");
+        nameTag.className = "name-tag";
+        nameTag.textContent = spot.name || "スポット";
 
         // 高度なマーカーを使用
         const marker = new AdvancedMarkerElement({
@@ -179,18 +174,11 @@ const initMap = async () => {
           title: spot.name || "スポット",
           gmpClickable: true,
         });
-        // Append the pin to the marker.
-        marker.append(pinElement);
+        // Append the Tag to the marker.
+        marker.append(nameTag);
         // Append the marker to the map.
         mapElement.append(marker);
         markers.value.push(marker);
-
-        // Add a click listener for each marker, and set up the info window.
-        marker.addListener("click", () => {
-          infoWindow.close();
-          infoWindow.setContent(marker.title);
-          infoWindow.open(marker.map, marker);
-        });
 
         // boundsに追加
         bounds.extend(
@@ -383,78 +371,68 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex flex-col h-dvh">
     <!-- マップ -->
-    <div class="flex-1 relative border border-gray-100 bg-gray-50">
+    <div class="flex-1 relative border border-gray-100 bg-gray-50 h-full">
       <gmp-map
         :center="{ lat: mapCenter.lat, lng: mapCenter.lng }"
         :zoom="15"
         map-id="9153bea12861ba5a84e2b6d3"
         class="w-full h-full"
       ></gmp-map>
+
+      <UCard class="absolute bottom-4 z-10 mx-2">
+        <template #header>
+          <h1 class="text-2xl font-bold mb-2">
+            {{ routeState.title }}
+          </h1>
+          <p class="text-sm mb-2">
+            {{ routeState.summary }}
+          </p>
+          <div class="grid grid-cols-3 gap-2 text-center text-xs">
+            <p class="mt-2">
+              <span class="text-xs text-primary-600">距離<br /></span>
+              <span class="text-lg font-bold"
+                >{{ toSignificantDigits(routeState.distance_km) }}km</span
+              >
+            </p>
+            <p class="mt-2">
+              <span class="text-xs text-primary-600">時間<br /></span>
+              <span class="text-lg font-bold"
+                >{{ toSignificantDigits(routeState.duration_min) }}分</span
+              >
+            </p>
+            <p class="mt-2">
+              <span class="text-xs text-primary-600">歩数<br /></span>
+              <span class="text-lg font-bold"
+                >{{
+                  toSignificantDigits(
+                    Math.round((routeState.distance_km! * 100000) / 76),
+                  )
+                }}歩</span
+              >
+            </p>
+          </div>
+        </template>
+
+        <template #footer>
+          <UButton
+            block
+            label="このルートを歩く"
+            color="primary"
+            class="text-lg font-bold rounded-full"
+            @click="startNavigation"
+          />
+          <UButton
+            block
+            label="検索条件を変更"
+            color="neutral"
+            variant="link"
+            to="/app/search"
+            class="text-sm mt-2"
+          />
+        </template>
+      </UCard>
     </div>
-
-    <UCard class="absolute top-[100%] z-10 mx-2 -translate-y-[calc(100%+1rem)]">
-      <template #header>
-        <h1 class="text-xl font-bold mb-2">{{ routeState.title }}</h1>
-        <p class="text-sm mb-2">
-          {{ routeState.summary }}
-        </p>
-        <div class="grid grid-cols-3 gap-2 text-center text-xs">
-          <p class="mt-1 text-lg font-bold text-primary-600">
-            {{ toSignificantDigits(routeState.distance_km) }}km
-          </p>
-          <p class="mt-1 text-lg font-bold text-indigo-600">
-            {{ toSignificantDigits(routeState.duration_min) }}分
-          </p>
-          <p class="mt-1 text-lg font-bold text-emerald-600">
-            {{
-              toSignificantDigits(
-                Math.round((routeState.distance_km! * 100000) / 76),
-              )
-            }}歩
-          </p>
-        </div>
-      </template>
-
-      <template #footer>
-        <UButton
-          block
-          label="このルートを歩く"
-          color="secondary"
-          class="text-lg font-bold rounded-full"
-          @click="startNavigation"
-        />
-        <UButton
-          block
-          label="検索条件を変更"
-          color="neutral"
-          variant="link"
-          to="/app/search"
-          class="text-sm mt-2"
-        />
-      </template>
-    </UCard>
   </div>
-
-  <!-- 再検索中のモーダル -->
-  <UModal
-    v-model:open="loadingRegenerate"
-    :dismissible="false"
-    title="ルートを再検索"
-    description="しばらくお待ちください。"
-  >
-    <template #content>
-      <div class="flex flex-col items-center justify-center space-y-4 py-4">
-        <UIcon
-          name="i-heroicons-arrow-path"
-          class="w-8 h-8 animate-spin text-secondary-600"
-        />
-        <div class="text-center space-y-2">
-          <p class="text-gray-600">散歩ルートを再検索しています。</p>
-          <p class="text-gray-600">しばらくお待ちください。</p>
-        </div>
-      </div>
-    </template>
-  </UModal>
 
   <!-- 評価モーダル -->
   <UModal
@@ -467,22 +445,14 @@ onBeforeUnmount(() => {
         <div v-if="feedbackSubmitted" class="space-y-4 py-4">
           <div class="flex flex-col items-center justify-center space-y-3">
             <div class="text-5xl">✨</div>
-            <p class="text-center text-base text-gray-700">
-              ご評価ありがとうございました！
-            </p>
-            <p class="text-center text-sm text-gray-500">
-              フィードバックを送信しました。
-            </p>
+            <p class="text-center">ご評価ありがとうございました！</p>
+            <p class="text-center text-sm">フィードバックを送信しました。</p>
           </div>
         </div>
         <div v-if="!feedbackSubmitted">
-          <p class="text-2xl font-bold text-center text-gray-700 my-2">
-            散歩、完了です！
-          </p>
+          <p class="text-2xl font-bold text-center my-4">おかえりなさい。</p>
           <div class="text-5xl text-center mb-8">🎉</div>
-          <p class="text-center text-gray-500 mb-2">
-            今回のルートはいかがでしたか？
-          </p>
+          <p class="text-center mb-2">今回のルートはいかがでしたか？</p>
           <div class="flex justify-center gap-2 mb-2">
             <button
               v-for="star in 5"
@@ -498,14 +468,40 @@ onBeforeUnmount(() => {
             block
             label="フィードバックを送信"
             variant="outline"
-            color="secondary"
+            color="primary"
             :loading="submittingFeedback"
             :disabled="rating === 0"
             @click="handleRatingSubmit"
-            class="text-lg font-bold rounded-full mx-2"
+            class="text-lg font-bold rounded-full m-2"
           />
         </div>
       </div>
     </template>
   </UModal>
 </template>
+
+<style scoped>
+:deep(.name-tag) {
+  background-color: #507956;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 6px 9px;
+  position: relative;
+  transform: translateY(-8px);
+}
+
+:deep(.name-tag::after) {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translate(-50%, 0);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 8px solid #507956;
+}
+</style>

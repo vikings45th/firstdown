@@ -347,7 +347,7 @@ onBeforeUnmount(() => {
         <!-- 現在地を取得ボタン（地図右下に重ねて表示） -->
         <UButton
           size="xl"
-          color="secondary"
+          color="primary"
           icon="ic:baseline-my-location"
           :loading="loadingLocation"
           @click="fetchCurrentLocation"
@@ -389,8 +389,8 @@ onBeforeUnmount(() => {
       </div>
       <UButton
         block
-        color="secondary"
-        label="散歩ルートを探す"
+        color="primary"
+        label="案内してもらう"
         class="my-4 text-lg font-bold rounded-full px-4"
         @click="callApi"
       />
@@ -408,7 +408,7 @@ onBeforeUnmount(() => {
       <div class="flex flex-col items-center justify-center space-y-4 py-4">
         <UIcon
           name="i-heroicons-arrow-path"
-          class="w-8 h-8 animate-spin text-secondary-600"
+          class="w-8 h-8 animate-spin text-primary-600"
         />
         <div class="text-center space-y-2">
           <p class="text-gray-600">条件に合う散歩ルートを探しています。</p>

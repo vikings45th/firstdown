@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
+import { fetchWeatherApi } from "openmeteo";
 
 interface SuggestedRoute {
   message: string;
@@ -17,13 +18,15 @@ const suggestedRouteSchema = z.object({
 });
 
 const createWalkingSuggestionPrompt = (
-  currentDateTime: string,
+  currentWeather: string,
   prevTheme?: string,
+  prevDistance?: number,
 ) => `現在の日本の状況（日時、天候、時間帯など）を考慮して、以下の4種類の散歩モードのうち最も適切な1つを選んでください。
 ${prevTheme ? `\n【重要】前回の提案テーマは「${prevTheme}」でした。今回の提案では、前回とは**別のテーマ**を必ず選んでください。\n` : ""}
+${prevDistance ? `\n【重要】前回の距離は「${prevDistance}」でした。今回の提案では、前回とは**別の距離**を必ず選んでください。\n` : ""}
 
 現在の情報：
-${currentDateTime}
+${currentWeather}
 
 各モードの説明：
 
@@ -64,35 +67,68 @@ distance_kmフィールドには、距離（1から3の数値、小数点可）�
 
 コードブロック記号（バッククォート3つなど）は使用せず、純粋なJSONオブジェクトのみを返してください。`;
 
+const weatherData = async () => {
+  const params = {
+    latitude: 35.685175,
+    longitude: 139.752799,
+    current: ["temperature_2m", "wind_speed_10m", "rain"],
+    timezone: "Asia/Tokyo",
+  };
+  const url = "https://api.open-meteo.com/v1/forecast";
+  const responses = await fetchWeatherApi(url, params);
+
+  // Process first location. Add a for-loop for multiple locations or weather models
+  const response = responses[0];
+
+  const utcOffsetSeconds = response.utcOffsetSeconds();
+
+  const current = response.current()!;
+
+  // Note: The order of weather variables in the URL query and the indices below need to match!
+  const weatherData = {
+    current: {
+      time: new Date((Number(current.time()) + utcOffsetSeconds) * 1000),
+      temperature_2m: current.variables(0)!.value(),
+      wind_speed_10m: current.variables(1)!.value(),
+      rain: current.variables(2)!.value(),
+    },
+  };
+
+  const res = `\n時間: ${weatherData.current.time},
+    \n気温: ${weatherData.current.temperature_2m},
+    \n風速: ${weatherData.current.wind_speed_10m},
+    \n雨量: ${weatherData.current.rain}`;
+
+  console.log(res);
+
+  return res;
+};
+
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
   const apiKey = config.geminiApiKey;
 
   const body = await readBody(event);
-  const { model = "gemini-2.5-flash", prevTheme } = body as {
+  const {
+    model = "gemini-2.5-flash",
+    prevTheme,
+    prevDistance,
+  } = body as {
     model?: string;
     prevTheme?: string;
+    prevDistance?: number;
   };
 
-  // 現在の日本の日時情報を取得
-  const now = new Date();
-  const jstDate = new Date(
-    now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }),
-  );
-  const currentDateTime = `現在の日時: ${jstDate.toLocaleString("ja-JP", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "numeric",
-    minute: "numeric",
-    weekday: "long",
-  })} (JST)`;
+  const currentWeather = await weatherData();
 
   const ai = new GoogleGenAI({ apiKey });
   // @ts-ignore - zod-to-json-schema type compatibility issue
   const jsonSchema = zodToJsonSchema(suggestedRouteSchema);
-  const prompt = createWalkingSuggestionPrompt(currentDateTime, prevTheme);
+  const prompt = createWalkingSuggestionPrompt(
+    currentWeather,
+    prevTheme,
+    prevDistance,
+  );
   const response = await ai.models.generateContent({
     model,
     contents: prompt,
