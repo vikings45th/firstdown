@@ -23,24 +23,19 @@ const suggestedRoute = ref<SuggestedRoute>({
 const features = ref([
   {
     title: "どこを歩くか考えなくていい",
-    icon: "i-lucide-smile",
+    icon: "i-lucide-route",
   },
   {
     title: "今の気分に合った散歩ができる",
-    icon: "i-lucide-a-large-small",
+    icon: "i-lucide-heart",
   },
   {
     title: "いつもと少し違う道を歩けることがある",
-    icon: "i-lucide-sun-moon",
+    icon: "i-lucide-compass",
   },
 ]);
 
-const chatButtonLabels = ref([
-  "これで行く",
-  "ちょっと違う気分",
-  "もう少し歩きたい",
-  "少し短めがいい",
-]);
+const chatButtonLabels = ref(["案内してもらう", "ちょっと違う気分"]);
 
 const firstSuggest = async () => {
   messages.value = [
@@ -50,7 +45,7 @@ const firstSuggest = async () => {
       parts: [
         {
           type: "text",
-          text: "あなたにおすすめの散歩テーマを提案します。",
+          text: "今に合う道を探しています。",
         },
       ],
     },
@@ -86,7 +81,7 @@ const resuggest = async () => {
     parts: [
       {
         type: "text",
-        text: "違う気分のテーマを考えています。",
+        text: "別の道を探しています。",
       },
     ],
   });
@@ -95,6 +90,7 @@ const resuggest = async () => {
     method: "POST",
     body: {
       prevTheme: suggestedRoute.value.theme,
+      prevDistance: suggestedRoute.value.distance_km,
       model: "gemini-2.5-flash",
     },
   });
@@ -115,7 +111,7 @@ const resuggest = async () => {
   });
 };
 
-const handleButtonClick = (label: string) => {
+const handleButtonClick = async (label: string) => {
   messages.value.push({
     id: "6045235a-a435-46b8-989d-2df38ca2eb47",
     role: "user",
@@ -127,34 +123,15 @@ const handleButtonClick = (label: string) => {
     ],
   });
 
-  if (label === "これで行く") {
+  // 0.5秒待機
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  if (label === "案内してもらう") {
     navigateTo(
       `/app/search?theme=${suggestedRoute.value.theme}&distance_km=${suggestedRoute.value.distance_km}&quicksearch=true`,
     );
   } else if (label === "ちょっと違う気分") {
     resuggest();
-  } else if (label === "もう少し歩きたい") {
-    // 距離を少し増やす処理（最大3kmまで）
-    if (suggestedRoute.value.distance_km < 3) {
-      suggestedRoute.value.distance_km = Math.min(
-        suggestedRoute.value.distance_km + 0.5,
-        3,
-      );
-      navigateTo(
-        `/app/search?theme=${suggestedRoute.value.theme}&distance_km=${suggestedRoute.value.distance_km}&quicksearch=true`,
-      );
-    }
-  } else if (label === "少し短めがいい") {
-    // 距離を少し減らす処理（最小1kmまで）
-    if (suggestedRoute.value.distance_km > 1) {
-      suggestedRoute.value.distance_km = Math.max(
-        suggestedRoute.value.distance_km - 0.5,
-        1,
-      );
-      navigateTo(
-        `/app/search?theme=${suggestedRoute.value.theme}&distance_km=${suggestedRoute.value.distance_km}&quicksearch=true`,
-      );
-    }
   }
 };
 
@@ -168,83 +145,66 @@ watch(isModalOpen, (newValue) => {
 
 <template>
   <UPageHero
-    title="歩けた。それだけで今日は十分"
     description="あなたの気分に寄り添った散歩コースを提案します。"
     orientation="horizontal"
   >
+    <template #title> 歩けた<br />それだけで今日は十分 </template>
     <img
       src="/img/heroimg.jpg"
       alt="App screenshot"
       class="rounded-lg shadow-2xl ring ring-default"
     />
   </UPageHero>
+  <UPageCTA title="散歩を提案してもらう">
+    <UDrawer direction="bottom" handle-only>
+      <UButton
+        color="primary"
+        label="チャットでいくつか答えるだけです。"
+        icon="i-lucide-message-circle"
+        size="xl"
+        block
+        @click="isModalOpen = true"
+      />
+
+      <template #content>
+        <div class="h-[90dvh] p-4 flex flex-col min-h-0">
+          <UChatPalette class="flex-1 min-h-0 flex flex-col">
+            <div class="overflow-y-auto flex-1 min-h-0">
+              <UChatMessages
+                should-auto-scroll
+                :status="geminiStatus"
+                :messages="messages"
+                :assistant="{
+                  avatar: {
+                    icon: 'i-lucide-bot',
+                  },
+                }"
+              />
+              <div
+                v-if="geminiStatus === 'ready'"
+                class="flex flex-wrap gap-2 m-4 justify-end"
+              >
+                <UButton
+                  v-for="(label, index) in chatButtonLabels"
+                  :key="index"
+                  :label="label"
+                  :color="index === 0 ? 'primary' : 'neutral'"
+                  variant="outline"
+                  class="rounded-full"
+                  @click="handleButtonClick(label)"
+                />
+              </div>
+            </div>
+          </UChatPalette>
+        </div>
+      </template>
+    </UDrawer>
+  </UPageCTA>
   <UPageSection
-    title="散歩した方がいいと分かっている。でも、疲れていると「どこを歩くか」を考えられない。"
-    description="このアプリは、今の気分に沿った散歩ルートを一つだけ提案します。"
+    title="散歩した方がいいと分かっている。でも疲れているとどこを歩くかを考えられない。"
+    description="今の気分に沿った散歩ルートを一つだけ提案します。"
     :features="features"
   />
-  <UPageCTA title="考えなくていい。今の気分のまま、外に出られる。">
-    <UButton
-      color="secondary"
-      label="ルートを教えてもらう"
-      icon="mdi:walk"
-      size="xl"
-      block
-      @click="isModalOpen = true"
-    />
-  </UPageCTA>
 
-  <!-- フローティングアクションボタン -->
-  <UButton
-    v-if="!isModalOpen"
-    icon="mdi:walk"
-    color="secondary"
-    size="xl"
-    class="fixed top-[calc(100vh-1.5rem)] left-[calc(100vw-1.5rem)] rounded-full shadow-lg z-50 p-4 -translate-y-full -translate-x-full"
-    @click="isModalOpen = true"
-  />
   <!-- モーダル -->
-  <div
-    v-if="isModalOpen"
-    class="fixed top-[calc(100vh-1.5rem)] left-[calc(100vw-1.5rem)] w-[75vw] h-[66vh] p-4 shadow-lg border rounded-lg z-100 flex flex-col bg-neutral-50 dark:bg-neutral-600 -translate-y-full -translate-x-full"
-  >
-    <div class="flex justify-end flex-shrink-0 mb-2">
-      <UButton
-        icon="i-lucide-x"
-        color="neutral"
-        size="xl"
-        variant="outline"
-        @click="isModalOpen = false"
-        class="rounded-full"
-      />
-    </div>
-    <div class="flex-1 overflow-y-auto min-h-0">
-      <UChatPalette>
-        <UChatMessages
-          should-auto-scroll
-          :status="geminiStatus"
-          :messages="messages"
-          :assistant="{
-            avatar: {
-              icon: 'i-lucide-bot',
-            },
-          }"
-        />
-        <div
-          v-if="geminiStatus === 'ready'"
-          class="flex flex-wrap gap-2 mt-4 justify-end"
-        >
-          <UButton
-            v-for="(label, index) in chatButtonLabels"
-            :key="index"
-            :label="label"
-            :color="index === 0 ? 'secondary' : 'neutral'"
-            variant="outline"
-            class="rounded-full"
-            @click="handleButtonClick(label)"
-          />
-        </div>
-      </UChatPalette>
-    </div>
-  </div>
 </template>

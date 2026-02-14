@@ -5,16 +5,17 @@
   /*https://uicolors.app/generate/2259f7*/
 
   /* Primary : Green (Go!) */
-  --color-verdant-50: #e8f5e9;
-  --color-verdant-100: #c8e6c9;
-  --color-verdant-200: #a5d6a7;
-  --color-verdant-300: #81c784;
-  --color-verdant-400: #66bb6a;
-  --color-verdant-500: #4caf50; /* primary */
-  --color-verdant-600: #43a047;
-  --color-verdant-700: #388e3c;
-  --color-verdant-800: #2e7d32;
-  --color-verdant-900: #1b5e20;
+  --color-amulet-50: #f2f7f2;
+  --color-amulet-100: #e2eae1;
+  --color-amulet-200: #c4d6c5;
+  --color-amulet-300: #9cb99f;
+  --color-amulet-400: #7a9e7e;
+  --color-amulet-500: #507956; /* primary */
+  --color-amulet-600: #3c5f42;
+  --color-amulet-700: #304c35;
+  --color-amulet-800: #283d2c;
+  --color-amulet-900: #213325;
+  --color-amulet-950: #121c15;
 
   /* Secondary : Orange (Action!) */
   --color-ember-50: #fff3e0;
