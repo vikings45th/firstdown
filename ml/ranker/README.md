@@ -432,6 +432,14 @@ Cloud Run では `models/` をイメージに同梱するか、ボリューム�
   - 入力: `{"instances":[{feature:value, ...}]}`
   - 出力: `{"predictions":[score, ...]}`
 
+#### 実装概要
+
+- **推論コンテナ**: `ml/vertex/predictor`（FastAPI）
+- **GCSから成果物取得**: `MODEL_GCS_URI` / `FEATURES_GCS_URI` / `METADATA_GCS_URI`
+- **推論I/O**:
+  - 入力: `{"instances":[{feature:value, ...}]}`
+  - 出力: `{"predictions":[score, ...]}`
+
 #### 前提条件
 
 - GCPプロジェクト: `firstdown-482704`
