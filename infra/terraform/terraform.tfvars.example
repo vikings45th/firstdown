@@ -20,7 +20,7 @@ region     = "asia-northeast1"
 # agent_image  = "asia-northeast1-docker.pkg.dev/PROJECT_ID/agent-repo/agent:latest"
 # ranker_image = "asia-northeast1-docker.pkg.dev/PROJECT_ID/ranker-repo/ranker:latest"
 # agent_env_features_version = "mvp_v1"
-# agent_env_vertex_text_model = "gemini-2.5-flash"
+# agent_env_vertex_text_model = "gemini-1.5-flash-002"
 # ranker_env_model_version   = "shadow_xgb_18feat"
 # ranker_env_ranker_version  = "rule_v1"
 # Vertex AI で推論する場合（18特徴量モデルを Vertex にデプロイ済みなら）
