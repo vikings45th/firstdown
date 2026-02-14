@@ -1,16 +1,25 @@
 from __future__ import annotations
 
-from pathlib import Path
+import asyncio
 import json
 import random
 import re
+from pathlib import Path
 from typing import Optional
 import logging
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
-from langchain_core.exceptions import OutputParserException
-from langchain_google_vertexai import ChatVertexAI
 from pydantic import ValidationError
+
+import vertexai
+from google.api_core.exceptions import (
+    InvalidArgument,
+    NotFound,
+    PermissionDenied,
+    ResourceExhausted,
+    ServiceUnavailable,
+)
+from vertexai.generative_models import GenerationConfig, GenerativeModel
 
 from app.schemas import DescriptionResponse, TitleResponse, TitleDescriptionResponse
 from app.settings import settings
@@ -24,30 +33,175 @@ _PROMPT_ENV = Environment(
     keep_trailing_newline=True,
 )
 
-_LLM_CACHE: dict[tuple[float, int], ChatVertexAI] = {}
+# Vertex AI 初期化は初回のみ
+_VERTEX_INIT_DONE = False
+# モデルは model_name のみでキャッシュ（GenerationConfig は呼び出しごとに渡す）
+_VERTEX_MODEL_CACHE: dict[str, GenerativeModel] = {}
+
+# 空レスポンスログ用
+_RAW_RESPONSE_LOG_CAP = 2000
 
 
-def _get_llm(*, temperature: float, max_output_tokens: int) -> Optional[ChatVertexAI]:
-    model_name = settings.VERTEX_TEXT_MODEL
+def _ensure_vertex_init() -> None:
+    global _VERTEX_INIT_DONE
+    if _VERTEX_INIT_DONE:
+        return
+    if not settings.VERTEX_PROJECT or not settings.VERTEX_LOCATION:
+        return
+    vertexai.init(project=settings.VERTEX_PROJECT, location=settings.VERTEX_LOCATION)
+    _VERTEX_INIT_DONE = True
+
+
+def _get_vertex_model(model_name: str) -> Optional[GenerativeModel]:
     if not model_name or not settings.VERTEX_PROJECT or not settings.VERTEX_LOCATION:
         return None
+    _ensure_vertex_init()
+    if model_name in _VERTEX_MODEL_CACHE:
+        return _VERTEX_MODEL_CACHE[model_name]
+    model = GenerativeModel(model_name)
+    _VERTEX_MODEL_CACHE[model_name] = model
+    return model
 
-    key = (temperature, max_output_tokens)
-    if key in _LLM_CACHE:
-        return _LLM_CACHE[key]
 
-    # langchain-google-vertexai の ChatVertexAI は max_tokens を受け取る（max_output_tokens は無視される）
-    llm = ChatVertexAI(
-        project=settings.VERTEX_PROJECT,
-        location=settings.VERTEX_LOCATION,
-        model_name=model_name,
+def _extract_text_from_response(resp: object) -> str:
+    """Vertex AI GenerateContentResponse からテキストを安全に抽出する。"""
+    if resp is None:
+        return ""
+    # 1) .text プロパティ（SDK が提供する場合）
+    text = getattr(resp, "text", None)
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+    # 2) candidates[0].content.parts[0].text
+    candidates = getattr(resp, "candidates", None)
+    if not candidates or not isinstance(candidates, (list, tuple)):
+        return ""
+    first = candidates[0] if candidates else None
+    if first is None:
+        return ""
+    content = getattr(first, "content", None)
+    if content is None:
+        return ""
+    parts = getattr(content, "parts", None)
+    if not parts or not isinstance(parts, (list, tuple)):
+        return ""
+    part = parts[0] if parts else None
+    if part is None:
+        return ""
+    t = getattr(part, "text", None)
+    if isinstance(t, str) and t.strip():
+        return t.strip()
+    return ""
+
+
+def _log_raw_response(raw: object) -> None:
+    """空判定時に Vertex レスポンスをログ出しし、原因切り分けする。"""
+    cap = _RAW_RESPONSE_LOG_CAP
+    ty = type(raw).__name__
+    logger.warning("[Vertex LLM] raw response type=%s", ty)
+    logger.warning("[Vertex LLM] raw repr=%s", repr(raw)[:cap])
+    if raw is None:
+        return
+    if hasattr(raw, "candidates"):
+        cands = getattr(raw, "candidates", None)
+        logger.warning("[Vertex LLM] raw.candidates len=%s", len(cands) if cands else 0)
+        if cands:
+            logger.warning("[Vertex LLM] raw.candidates[0]=%s", repr(cands[0])[:cap])
+    if hasattr(raw, "prompt_feedback"):
+        pf = getattr(raw, "prompt_feedback", None)
+        if pf is not None:
+            logger.warning("[Vertex LLM] raw.prompt_feedback=%s", repr(pf)[:cap])
+
+
+def _invoke_vertex_text_sync(
+    prompt: str,
+    *,
+    temperature: float,
+    max_output_tokens: int,
+) -> tuple[str, bool]:
+    """
+    Vertex AI 公式 SDK で同期的にテキスト生成する。
+    戻り値: (抽出したテキスト, リトライすべきか).
+    - 成功: (text, False)
+    - 恒久エラー(404/403/InvalidArgument) or 空レスポンス: ("", False)
+    - 一時的エラー(429/503): ("", True)
+    """
+    model_name = settings.VERTEX_TEXT_MODEL
+    model = _get_vertex_model(model_name or "")
+    if model is None:
+        logger.warning("[Vertex LLM] Vertex not configured (project/location/model)")
+        return ("", False)
+
+    top_p = float(getattr(settings, "VERTEX_TOP_P", 0.95))
+    top_k = int(getattr(settings, "VERTEX_TOP_K", 40))
+    config = GenerationConfig(
+        max_output_tokens=max_output_tokens,
         temperature=temperature,
-        max_tokens=max_output_tokens,
-        top_p=float(getattr(settings, "VERTEX_TOP_P", 0.95)),
-        top_k=int(getattr(settings, "VERTEX_TOP_K", 40)),
+        top_p=top_p,
+        top_k=top_k,
     )
-    _LLM_CACHE[key] = llm
-    return llm
+    try:
+        resp = model.generate_content(prompt, generation_config=config)
+    except NotFound:
+        logger.warning("[Vertex LLM] NotFound (404), skip retry")
+        return ("", False)
+    except PermissionDenied:
+        logger.warning("[Vertex LLM] PermissionDenied (403), skip retry")
+        return ("", False)
+    except InvalidArgument as e:
+        logger.warning("[Vertex LLM] InvalidArgument, skip retry: %r", e)
+        return ("", False)
+    except ResourceExhausted as e:
+        logger.warning("[Vertex LLM] ResourceExhausted (429), retryable: %r", e)
+        return ("", True)
+    except ServiceUnavailable as e:
+        logger.warning("[Vertex LLM] ServiceUnavailable (503), retryable: %r", e)
+        return ("", True)
+    except Exception as e:
+        logger.exception("[Vertex LLM] unexpected error: %r", e)
+        return ("", False)
+
+    text = _extract_text_from_response(resp)
+    if not text:
+        _log_raw_response(resp)
+        logger.warning("[Vertex LLM] empty response (vertex SDK)")
+        return ("", False)
+    return (text, False)
+
+
+async def _invoke_vertex_text(
+    prompt: str,
+    *,
+    temperature: float,
+    max_output_tokens: int,
+) -> str:
+    """
+    Vertex AI 公式 SDK でテキスト生成（非同期ラップ）。
+    429/503 は最大1回だけ短いバックオフでリトライする。
+    """
+    loop = asyncio.get_event_loop()
+    text, should_retry = await loop.run_in_executor(
+        None,
+        lambda: _invoke_vertex_text_sync(
+            prompt,
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
+        ),
+    )
+    if not should_retry:
+        return text
+    # 0.3〜1.0秒のバックオフで1回だけリトライ
+    backoff = 0.3 + (random.random() * 0.7)
+    logger.info("[Vertex LLM] retry after %.2fs (429/503)", backoff)
+    await asyncio.sleep(backoff)
+    text2, _ = await loop.run_in_executor(
+        None,
+        lambda: _invoke_vertex_text_sync(
+            prompt,
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
+        ),
+    )
+    return text2
 
 
 def _forbidden_words() -> list[str]:
@@ -87,33 +241,6 @@ def _coerce_structured(result: object, schema: type) -> object:
             if match:
                 return schema.model_validate(json.loads(match.group(0)))
     return schema.model_validate(result)
-
-
-def _log_raw_response(raw: object) -> None:
-    """空判定時にモデル/SDKの生レスポンスを丸ごとログ出しし、原因切り分けする。"""
-    cap = 2000
-    ty = type(raw).__name__
-    logger.warning("[Vertex LLM Title+Summary] raw response type=%s", ty)
-    logger.warning("[Vertex LLM Title+Summary] raw repr=%s", repr(raw)[:cap])
-    if raw is None:
-        return
-    if hasattr(raw, "content"):
-        c = getattr(raw, "content", None)
-        logger.warning("[Vertex LLM Title+Summary] raw.content=%s", repr(c)[:cap])
-    if hasattr(raw, "response_metadata"):
-        m = getattr(raw, "response_metadata", None)
-        logger.warning("[Vertex LLM Title+Summary] raw.response_metadata=%s", repr(m)[:cap])
-    if hasattr(raw, "additional_kwargs"):
-        a = getattr(raw, "additional_kwargs", None)
-        if a:
-            logger.warning("[Vertex LLM Title+Summary] raw.additional_kwargs=%s", repr(a)[:cap])
-    if isinstance(raw, dict):
-        logger.warning("[Vertex LLM Title+Summary] raw keys=%s", list(raw.keys()))
-        if "candidates" in raw:
-            cands = raw["candidates"]
-            logger.warning("[Vertex LLM Title+Summary] raw.candidates len=%s", len(cands) if cands else 0)
-            if cands:
-                logger.warning("[Vertex LLM Title+Summary] raw.candidates[0]=%s", repr(cands[0])[:cap])
 
 
 def _spot_names(spots: Optional[list]) -> list[str]:
@@ -186,21 +313,6 @@ def _theme_to_natural(theme: str) -> str:
     return theme_map.get(theme, theme)
 
 
-async def _invoke_structured(prompt: str, *, temperature: float, max_output_tokens: int, schema: type) -> object:
-    llm = _get_llm(temperature=temperature, max_output_tokens=max_output_tokens)
-    if llm is None:
-        raise RuntimeError("Vertex LLM is not configured")
-    runnable = llm.with_structured_output(schema)
-    return await runnable.ainvoke(prompt)
-
-
-async def _invoke_raw(prompt: str, *, temperature: float, max_output_tokens: int) -> object:
-    llm = _get_llm(temperature=temperature, max_output_tokens=max_output_tokens)
-    if llm is None:
-        raise RuntimeError("Vertex LLM is not configured")
-    return await llm.ainvoke(prompt)
-
-
 async def generate_summary(
     *,
     theme: str,
@@ -234,19 +346,25 @@ async def generate_summary(
             forbidden_words=forbidden_words,
         )
         try:
-            result = await _invoke_structured(
+            logger.info(
+                "[Vertex LLM Summary] invoke max_output_tokens=%s temperature=%s",
+                attempt["max_out"],
+                attempt["temperature"],
+            )
+            text = await _invoke_vertex_text(
                 prompt,
                 temperature=attempt["temperature"],
                 max_output_tokens=attempt["max_out"],
-                schema=DescriptionResponse,
             )
-            parsed = _coerce_structured(result, DescriptionResponse)
-            text = parsed.description
-            banned = _contains_forbidden(text, forbidden_words)
+            if not text:
+                continue
+            parsed = _coerce_structured(text, DescriptionResponse)
+            desc_text = parsed.description
+            banned = _contains_forbidden(desc_text, forbidden_words)
             if banned:
                 raise ValueError(f"forbidden word found: {banned}")
-            return text
-        except (OutputParserException, ValidationError, ValueError) as e:
+            return desc_text
+        except (ValidationError, ValueError) as e:
             logger.warning("[Vertex LLM Summary Invalid] err=%r", e)
         except Exception as e:
             logger.exception("[Vertex LLM Summary Error] err=%r", e)
@@ -284,19 +402,25 @@ async def generate_title(
             forbidden_words=forbidden_words,
         )
         try:
-            result = await _invoke_structured(
+            logger.info(
+                "[Vertex LLM Title] invoke max_output_tokens=%s temperature=%s",
+                attempt["max_out"],
+                attempt["temperature"],
+            )
+            text = await _invoke_vertex_text(
                 prompt,
                 temperature=attempt["temperature"],
                 max_output_tokens=attempt["max_out"],
-                schema=TitleResponse,
             )
-            parsed = _coerce_structured(result, TitleResponse)
-            text = parsed.title
-            banned = _contains_forbidden(text, forbidden_words)
+            if not text:
+                continue
+            parsed = _coerce_structured(text, TitleResponse)
+            title_text = parsed.title
+            banned = _contains_forbidden(title_text, forbidden_words)
             if banned:
                 raise ValueError(f"forbidden word found: {banned}")
-            return text
-        except (OutputParserException, ValidationError, ValueError) as e:
+            return title_text
+        except (ValidationError, ValueError) as e:
             logger.warning("[Vertex LLM Title Invalid] err=%r", e)
         except Exception as e:
             logger.exception("[Vertex LLM Title Error] err=%r", e)
@@ -355,27 +479,19 @@ async def generate_title_and_description(
             forbidden_words=forbidden_words,
         )
         try:
-            # 構造化出力(with_structured_output)だと毎回空返しになるため、生テキストで呼びプロンプト通りの1行JSONを返させる
             max_tokens = attempt["max_out"]
             logger.info(
                 "[Vertex LLM Title+Summary] invoke max_output_tokens=%s temperature=%s",
                 max_tokens,
                 attempt["temperature"],
             )
-            raw_from_sdk = await _invoke_raw(
+            text = await _invoke_vertex_text(
                 prompt,
                 temperature=attempt["temperature"],
                 max_output_tokens=max_tokens,
             )
-            # 空なのが「モデル出力」か「SDK取り出し」か切り分けるため、生レスポンスを保持
-            result = raw_from_sdk
-            if hasattr(result, "content"):
-                result = result.content
-            text = (result or "").strip()
             if not text:
-                # 丸ごとログ出し: 型・repr・content の有無、candidates 等の別取り出し候補
-                _log_raw_response(raw_from_sdk)
-                logger.warning("[Vertex LLM Title+Summary] empty response (raw invoke)")
+                logger.warning("[Vertex LLM Title+Summary] empty response")
                 continue
             parsed = _coerce_structured(text, TitleDescriptionResponse)
             title = parsed.title
@@ -384,7 +500,7 @@ async def generate_title_and_description(
             if banned:
                 raise ValueError(f"forbidden word found: {banned}")
             return {"title": title, "description": description}
-        except (OutputParserException, ValidationError, ValueError) as e:
+        except (ValidationError, ValueError) as e:
             logger.warning("[Vertex LLM Title+Summary Invalid] err=%r", e)
         except Exception as e:
             logger.exception("[Vertex LLM Title+Summary Error] err=%r", e)

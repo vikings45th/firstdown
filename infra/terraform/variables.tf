@@ -94,7 +94,7 @@ variable "agent_env_features_version" {
 
 variable "agent_env_vertex_text_model" {
   type        = string
-  default     = "gemini-2.5-flash"
+  default     = "gemini-1.5-flash-002"
   description = "Agent の VERTEX_TEXT_MODEL"
 }
 
